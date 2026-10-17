@@ -10,7 +10,7 @@ Aplicação B2B para gestão financeira e administração da plataforma. Interfa
 - Na visão geral, análise setorial que cruza até seis meses de movimentações com notícias recentes, estima receitas, despesas, lucro e margem nos seis meses seguintes e recomenda ações; as notícias são citadas no próprio relatório.
 - Filtro de movimentações para 30, 60 ou 90 dias, histórico completo ou intervalo personalizado, com resumo de faturamento, despesas, lucro líquido e margem.
 - Previsão de caixa em cenários conservador, base e otimista, calculada a partir das receitas e despesas dos últimos 3 ou 6 meses completos com movimentação registrada; saldo inicial, horizonte e taxas podem ser ajustados e ficam salvos por empresa.
-- Importação CSV `data;descricao;tipo;valor;categoria`, com limite de 100 linhas e gravação atômica.
+- Importação CSV com cabeçalhos em português ou inglês, separador `;`, `,` ou tabulação, até 500 linhas e gravação atômica. Reconhece data, descrição/histórico, tipo e valor; categoria pode faltar. Guarda também conta contábil, código de conta, contraparte, centro de custo, documento, vencimento, pagamento, forma, status e observações quando presentes. Categorias inferidas ficam marcadas como sugestões para revisão.
 - Área da empresa e consulta da equipe aprovada.
 - CSV de demonstração exclusivamente fictício.
 
@@ -55,7 +55,7 @@ A conta empresarial de teste contém cinco lançamentos fictícios. O CSV `demo.
 
 ## Limites conhecidos
 
-- A importação CSV aceita até 100 linhas por arquivo.
+- A importação CSV aceita até 500 linhas por arquivo. Os mapeamentos de cabeçalho e as categorias sugeridas seguem regras heurísticas; revise classificações antes de usar em relatórios oficiais ou obrigações fiscais.
 - Esta implantação não está homologada para operação comercial com dados reais. Antes disso, completar verificação de e-mail, recuperação de acesso, cobrança, revisão independente de segurança e validação ponta a ponta em navegador.
 - A previsão da empresa estima entradas e saídas recorrentes com base na média histórica e nas taxas informadas. Não incorpora automaticamente contas a receber/pagar futuras ainda não lançadas, sazonalidade ou saldo bancário; o saldo inicial deve ser informado pela empresa.
 - A previsão financeira administrativa é uma estimativa linear de receita recorrente baseada na base ativa, ticket médio e novos clientes mensais informados; não é uma garantia de vendas ou recebimentos.
