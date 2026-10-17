@@ -23,6 +23,57 @@ const randomHex = (n = 32) => bytesToHex(crypto.getRandomValues(new Uint8Array(n
 const sha256 = async (value) => bytesToHex(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
 const money = (cents) => Number(cents || 0) / 100;
 
+function shiftMonth(month, offset) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(year, monthNumber - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+async function buildForecast(db, tenantId, preferences) {
+  const now = new Date();
+  const currentMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const monthRows = await db.prepare(`SELECT substr(date,1,7) AS month,
+      SUM(CASE WHEN type='income' THEN amount_cents ELSE 0 END) AS income_cents,
+      SUM(CASE WHEN type='expense' THEN amount_cents ELSE 0 END) AS expense_cents
+    FROM transactions WHERE tenant_id=? AND date>=? AND date<?
+    GROUP BY substr(date,1,7) ORDER BY month`)
+    .bind(tenantId, `${shiftMonth(currentMonth, -6)}-01`, `${currentMonth}-01`).all();
+  const monthly = new Map((monthRows.results || []).map(row => [row.month, row]));
+  const history = Array.from({ length: 6 }, (_, index) => {
+    const month = shiftMonth(currentMonth, index - 6), row = monthly.get(month);
+    return { month, income_cents: Number(row?.income_cents || 0), expense_cents: Number(row?.expense_cents || 0) };
+  });
+  const sample = history.slice(-preferences.history_months);
+  const averageIncome = Math.round(sample.reduce((sum, item) => sum + item.income_cents, 0) / sample.length);
+  const averageExpense = Math.round(sample.reduce((sum, item) => sum + item.expense_cents, 0) / sample.length);
+  const deltas = [
+    { key: "conservative", name: "Conservador", revenue: -3, expense: 3 },
+    { key: "base", name: "Base", revenue: 0, expense: 0 },
+    { key: "optimistic", name: "Otimista", revenue: 3, expense: -2 },
+  ];
+  const scenarios = deltas.map(item => {
+    const revenueGrowth = Math.max(-50, Math.min(100, preferences.revenue_growth + item.revenue));
+    const expenseGrowth = Math.max(-50, Math.min(100, preferences.expense_growth + item.expense));
+    let balance = preferences.opening_balance_cents;
+    const points = [{ month: currentMonth, balance_cents: balance, income_cents: 0, expense_cents: 0 }];
+    let totalIncome = 0, totalExpense = 0, minimumBalance = balance;
+    for (let index = 1; index <= preferences.horizon_months; index++) {
+      const income = Math.max(0, Math.round(averageIncome * Math.pow(1 + revenueGrowth / 100, index - 1)));
+      const expense = Math.max(0, Math.round(averageExpense * Math.pow(1 + expenseGrowth / 100, index - 1)));
+      balance += income - expense;
+      totalIncome += income;
+      totalExpense += expense;
+      minimumBalance = Math.min(minimumBalance, balance);
+      points.push({ month: shiftMonth(currentMonth, index), balance_cents: balance, income_cents: income, expense_cents: expense });
+    }
+    return { key: item.key, name: item.name, revenue_growth: revenueGrowth, expense_growth: expenseGrowth,
+      ending_balance_cents: balance, minimum_balance_cents: minimumBalance,
+      total_income_cents: totalIncome, total_expense_cents: totalExpense, points };
+  });
+  return { preferences, history, average_income_cents: averageIncome, average_expense_cents: averageExpense,
+    sample_months: sample.length, scenarios };
+}
+
 function safeEqual(a, b) {
   const left = encoder.encode(a);
   const right = encoder.encode(b);
@@ -193,13 +244,31 @@ const APP_HTML = `<!doctype html>
 <div id="app" class="dash"><div class="app-shell"><aside class="sidebar"><a class="brand" href="#"><span class="brand-lockup"><img class="brand-logo-full" src="/logo-wordmark.png" alt="FUTURA AI"><img class="brand-logo-mark" src="/logo-mark.png" alt=""><small>painel empresarial</small></span></a><div class="side-label">Workspace</div><nav><button class="navbtn active" data-page="overview">⌂ <span>Visão geral</span></button><button class="navbtn" data-page="transactions">⇄ <span>Movimentações</span></button><button class="navbtn" data-page="projections">⌁ <span>Projeções</span></button><button class="navbtn" data-page="company">▦ <span>Empresa e equipe</span></button></nav><div class="side-bottom"><div class="profile-mini" id="side-profile"></div><button class="btn ghost small" id="logout-button">Sair da conta</button></div></aside><main class="main"><div class="content"><header class="dash-top"><div><h1 id="page-title">Visão geral</h1><p id="company-line"></p></div><div class="top-actions"><span class="pill">● Homologação</span><button class="btn ghost small" id="logout-top">Sair</button></div></header>
 <section class="page active" id="page-overview"><div class="grid kpis"><article class="kpi"><div class="label">Saldo líquido <span>◉</span></div><div class="value" id="kpi-net">R$ 0,00</div><div class="trend" id="kpi-net-note">No período importado</div></article><article class="kpi"><div class="label">Receitas <span>↗</span></div><div class="value" id="kpi-income">R$ 0,00</div><div class="trend">Entradas registradas</div></article><article class="kpi"><div class="label">Despesas <span>↘</span></div><div class="value" id="kpi-expense">R$ 0,00</div><div class="trend down">Saídas registradas</div></article><article class="kpi"><div class="label">Lançamentos <span>▤</span></div><div class="value" id="kpi-count">0</div><div class="trend" id="kpi-count-note">Registros nesta empresa</div></article></div><div class="grid two-col"><article class="card"><div class="card-title"><h3>Movimento mensal</h3><span id="graph-period">Últimos 6 meses</span></div><div class="graph" id="overview-graph"></div><div class="chart-foot"><span><i class="dot"></i>Receitas</span><span><i class="dot red"></i>Despesas</span></div></article><article class="card"><div class="card-title"><h3>Despesas por categoria</h3><span>Distribuição</span></div><div id="categories"></div></article></div><article class="card" style="margin-top:14px"><div class="card-title"><h3>Movimentações recentes</h3><button class="btn ghost small" data-goto="transactions">Ver todas</button></div><div id="recent-table" class="table-wrap"></div></article><div class="notice" style="margin-top:14px">Esta conta está em homologação. Use exclusivamente dados fictícios e valide os resultados antes de qualquer uso operacional.</div></section>
 <section class="page" id="page-transactions"><div class="toolbar"><button class="btn" id="upload-csv">Importar CSV</button><button class="btn secondary" id="demo-import">Carregar dados de demonstração</button><a class="btn ghost small" href="/demo.csv" download>Baixar CSV de exemplo</a><input id="file-input" type="file" accept=".csv,text/csv" class="hidden"></div><div class="card"><div class="card-title"><h3>Movimentações</h3><span id="transaction-count">0 lançamentos</span></div><div id="transaction-table" class="table-wrap"></div></div><p class="sub" style="margin-top:10px">Formato: data;descricao;tipo;valor;categoria · Use receita/despesa e valores em reais.</p></section>
-<section class="page" id="page-projections"><div class="grid scenario-grid"><form id="scenario-form" class="card"><h3>Novo cenário</h3><p class="sub">Uma projeção simples a partir do saldo líquido atual. Não é recomendação financeira.</p><div class="field"><label for="scenario-name">Nome do cenário</label><input id="scenario-name" maxlength="80" value="Crescimento base" required></div><div class="field"><label for="scenario-growth">Crescimento mensal estimado (%)</label><input id="scenario-growth" type="number" step="0.1" min="-50" max="100" value="5" required></div><div class="field"><label for="scenario-months">Horizonte (meses)</label><select id="scenario-months"><option value="3">3 meses</option><option value="6" selected>6 meses</option><option value="12">12 meses</option></select></div><div class="message" id="scenario-message"></div><button class="btn">Salvar cenário</button></form><article class="card"><div class="card-title"><h3>Projeção de caixa</h3><span>Estimativa matemática</span></div><div id="scenario-preview" class="scenario-result"><span class="muted">Saldo inicial</span><strong id="scenario-current">R$ 0,00</strong><span class="muted" id="scenario-end-label">Saldo projetado em 6 meses</span><strong class="positive" id="scenario-end">R$ 0,00</strong></div><div class="notice" style="margin-top:14px">A projeção usa taxa mensal composta sobre o saldo líquido importado. Não inclui impostos, sazonalidade, inflação ou compromissos futuros.</div></article></div><article class="card" style="margin-top:14px"><div class="card-title"><h3>Cenários salvos</h3><span>Privados à empresa</span></div><div id="scenario-list"></div></article></section>
+<section class="page" id="page-projections">
+  <div class="notice" style="margin-bottom:14px">A previsão usa as receitas e despesas mensais registradas nos últimos meses completos. Informe o caixa disponível hoje; os cenários mostram como o saldo pode evoluir sob premissas diferentes. Não inclui contas a receber/pagar futuras que ainda não foram lançadas.</div>
+  <form id="forecast-form" class="card">
+    <div class="card-title"><h3>Premissas da previsão</h3><span>Salvas nesta empresa</span></div>
+    <div class="grid split">
+      <div class="field"><label for="forecast-opening">Saldo de caixa disponível hoje (R$)</label><input id="forecast-opening" type="number" step="0.01" min="-100000000" max="100000000" value="0" required></div>
+      <div class="field"><label for="forecast-horizon">Horizonte da previsão</label><select id="forecast-horizon"><option value="3">3 meses</option><option value="6" selected>6 meses</option><option value="12">12 meses</option></select></div>
+      <div class="field"><label for="forecast-history">Histórico usado na média</label><select id="forecast-history"><option value="3" selected>3 meses completos</option><option value="6">6 meses completos</option></select></div>
+      <div class="field"><label for="forecast-revenue-growth">Crescimento mensal de receitas no cenário base (%)</label><input id="forecast-revenue-growth" type="number" step="0.1" min="-50" max="100" value="0" required></div>
+      <div class="field"><label for="forecast-expense-growth">Variação mensal de despesas no cenário base (%)</label><input id="forecast-expense-growth" type="number" step="0.1" min="-50" max="100" value="0" required></div>
+      <div style="display:flex;align-items:end"><button class="btn" style="width:100%">Atualizar previsão</button></div>
+    </div>
+    <div class="message" id="forecast-message" style="margin-top:8px"></div>
+    <p class="sub" style="margin:8px 0 0">Os cenários conservador e otimista ajustam automaticamente as taxas do cenário base. A média considera os meses completos, inclusive meses sem movimentação.</p>
+  </form>
+  <div class="grid scenario-grid" id="forecast-cards" style="margin:14px 0"></div>
+  <article class="card"><div class="card-title"><h3>Evolução projetada do caixa</h3><span id="forecast-history-label"></span></div><div id="forecast-chart"></div><div class="chart-foot"><span><i class="dot" style="background:#f29a9b"></i>Conservador</span><span><i class="dot" style="background:#70e1dc"></i>Base</span><span><i class="dot" style="background:#a78bfa"></i>Otimista</span></div></article>
+  <article class="card" style="margin-top:14px"><div class="card-title"><h3>Detalhamento mensal · cenário base</h3><span>Entradas, saídas e caixa final estimados</span></div><div id="forecast-table" class="table-wrap"></div></article>
+</section>
 <section class="page" id="page-company"><div class="grid split"><article class="card"><div class="card-title"><h3>Empresa</h3><span class="badge">Conta isolada</span></div><div class="row"><div class="who">Razão social / nome<small id="company-name"></small></div></div><div class="row"><div class="who">Plano de referência<small id="company-plan"></small></div></div><div class="row"><div class="who">Identificador da empresa<small id="company-id" style="font-family:monospace"></small></div></div><div class="notice" style="margin-top:14px">Os lançamentos e projeções são sempre consultados pelo identificador desta empresa.</div></article><article class="card"><div class="card-title"><h3>Meu perfil</h3><span id="my-role" class="badge"></span></div><div class="row"><div class="who">Nome<small id="my-name"></small></div></div><div class="row"><div class="who">E-mail<small id="my-email"></small></div></div><div class="row"><div class="who">Acesso<small id="my-access"></small></div></div></article></div><article class="card" style="margin-top:14px"><div class="card-title"><h3>Equipe</h3><span id="team-count">0 pessoas</span></div><div id="team-list"></div><div class="notice" style="margin-top:14px">Convites por e-mail e administração de acessos serão habilitados numa próxima etapa.</div></article></section>
 </div></main></div></div>
 <div id="toast-host" style="position:fixed;right:16px;bottom:80px;z-index:20"></div>
 <script>
 const $=(s)=>document.querySelector(s), $$=(s)=>Array.from(document.querySelectorAll(s));
-const state={me:null,dashboard:null,transactions:[],scenarios:[],team:[],page:"overview"};
+const state={me:null,dashboard:null,transactions:[],forecast:null,team:[],page:"overview"};
 const money=(v)=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const esc=(s)=>String(s??"").replace(/[&<>"']/g,c=>c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":c==='"'?"&quot;":"&#39;");
 async function api(path,options={}){const res=await fetch(path,{...options,headers:{"content-type":"application/json",...(options.headers||{})},credentials:"same-origin"});let data={};try{data=await res.json()}catch{}if(!res.ok)throw new Error(data.error||"Não foi possível concluir a solicitação.");return data}
@@ -210,17 +279,19 @@ async function logout(call=true){if(call)try{await api("/api/auth/logout",{metho
 function renderTable(rows,target,empty="Nenhum lançamento registrado ainda."){if(!rows.length){$(target).innerHTML=\`<div class="empty">\${empty}</div>\`;return}$(target).innerHTML=\`<table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th class="right">Valor</th></tr></thead><tbody>\${rows.map(r=>\`<tr><td>\${esc(new Date(r.date+"T00:00:00").toLocaleDateString("pt-BR"))}</td><td>\${esc(r.description)}</td><td>\${esc(r.category)}</td><td><span class="kind \${r.type}">\${r.type==="income"?"Receita":"Despesa"}</span></td><td class="right \${r.type==="income"?"positive":""}">\${money(r.amount_cents/100)}</td></tr>\`).join("")}</tbody></table>\`}
 function drawGraph(months){const vals=months||[];const max=Math.max(1,...vals.flatMap(m=>[m.income,m.expense]));$("#overview-graph").innerHTML=vals.map(m=>\`<div class="graph-col"><i style="height:\${Math.max(3,Math.round(m.income/max*94))}%"></i><i class="exp" style="height:\${Math.max(3,Math.round(m.expense/max*94))}%"></i><small>\${esc(m.label)}</small></div>\`).join("")||'<div class="empty">Importe lançamentos para visualizar o fluxo.</div>'}
 function renderCategories(categories){const list=categories||[];const total=list.reduce((a,x)=>a+x.amount,0);$("#categories").innerHTML=list.length?list.slice(0,6).map((x,i)=>{const pct=total?Math.round(x.amount/total*100):0;return \`<div class="category-row"><header><span>\${esc(x.category)}</span><span>\${money(x.amount)} · \${pct}%</span></header><div class="progress"><i style="width:\${pct}%;background:\${["linear-gradient(90deg,#70e1dc,#729cff)","linear-gradient(90deg,#e5c47f,#d58976)","linear-gradient(90deg,#af95ee,#758dff)"][i%3]}"></i></div></div>\`}).join(""):'<div class="empty">As categorias aparecem após a importação.</div>'}
-function renderScenarios(){const list=state.scenarios;$("#scenario-list").innerHTML=list.length?list.map(x=>\`<div class="row"><div class="who">\${esc(x.name)}<small>\${x.months} meses · \${x.monthly_growth}% ao mês</small></div><div style="text-align:right"><strong>\${money(x.projected_cents/100)}</strong><small class="muted" style="display:block">projeção</small></div></div>\`).join(""):'<div class="empty">Nenhum cenário salvo.</div>'}
+function monthLabel(value){return new Date(value+"-01T00:00:00Z").toLocaleDateString("pt-BR",{month:"short",year:"2-digit",timeZone:"UTC"})}
+function renderForecast(f){if(!f)return;const p=f.preferences;$("#forecast-opening").value=(p.opening_balance_cents/100).toFixed(2);$("#forecast-horizon").value=String(p.horizon_months);$("#forecast-history").value=String(p.history_months);$("#forecast-revenue-growth").value=Number(p.revenue_growth).toFixed(1);$("#forecast-expense-growth").value=Number(p.expense_growth).toFixed(1);$("#forecast-history-label").textContent=\`Média de \${f.sample_months} meses completos · receitas \${money(f.average_income_cents/100)} · despesas \${money(f.average_expense_cents/100)}\`;const colors={conservative:"#f29a9b",base:"#70e1dc",optimistic:"#a78bfa"};$("#forecast-cards").innerHTML=f.scenarios.map(x=>\`<article class="scenario-result"><span class="muted">\${esc(x.name)}</span><strong style="color:\${colors[x.key]}">\${money(x.ending_balance_cents/100)}</strong><span class="muted">Caixa estimado ao final de \${p.horizon_months} meses</span><div class="row"><span>Menor saldo no período</span><b>\${money(x.minimum_balance_cents/100)}</b></div><div class="row"><span>Receitas estimadas</span><b>\${money(x.total_income_cents/100)}</b></div><div class="row"><span>Despesas estimadas</span><b>\${money(x.total_expense_cents/100)}</b></div><small class="muted">Receitas \${x.revenue_growth.toFixed(1)}% · despesas \${x.expense_growth.toFixed(1)}% ao mês</small></article>\`).join("");const all=f.scenarios.flatMap(x=>x.points.map(pt=>pt.balance_cents/100));let low=Math.min(...all),high=Math.max(...all);if(low===high){low-=1;high+=1}const pad={l:58,r:18,t:16,b:34},w=780,h=250,plotW=w-pad.l-pad.r,plotH=h-pad.t-pad.b;const y=value=>pad.t+(high-value)/(high-low)*plotH;const x=index=>pad.l+index*plotW/p.horizon_months;let svg=\`<svg viewBox="0 0 \${w} \${h}" role="img" aria-label="Comparação de três cenários de caixa" style="width:100%;height:auto;min-height:220px">\`;for(let i=0;i<4;i++){const value=low+(high-low)*i/3,yy=y(value);svg+=\`<line x1="\${pad.l}" y1="\${yy}" x2="\${w-pad.r}" y2="\${yy}" stroke="#253248"/><text x="\${pad.l-8}" y="\${yy+4}" text-anchor="end" fill="#97a7bf" font-size="10">\${esc(money(value))}</text>\`}for(let i=0;i<=p.horizon_months;i++){const xx=x(i),label=i===0?"Hoje":monthLabel(f.scenarios[1].points[i].month);svg+=\`<text x="\${xx}" y="\${h-8}" text-anchor="middle" fill="#97a7bf" font-size="10">\${esc(label)}</text>\`}for(const scenario of f.scenarios){const points=scenario.points.map((pt,i)=>\`\${x(i)},\${y(pt.balance_cents/100)}\`).join(" ");svg+=\`<polyline points="\${points}" fill="none" stroke="\${colors[scenario.key]}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>\`}svg+="</svg>";$("#forecast-chart").innerHTML=svg;const base=f.scenarios.find(x=>x.key==="base");$("#forecast-table").innerHTML=\`<table><thead><tr><th>Mês</th><th class="right">Entradas</th><th class="right">Saídas</th><th class="right">Caixa final estimado</th></tr></thead><tbody>\${base.points.slice(1).map(pt=>\`<tr><td>\${esc(monthLabel(pt.month))}</td><td class="right positive">\${money(pt.income_cents/100)}</td><td class="right">\${money(pt.expense_cents/100)}</td><td class="right"><strong>\${money(pt.balance_cents/100)}</strong></td></tr>\`).join("")}</tbody></table>\`}
 function renderTeam(){const list=state.team;$("#team-list").innerHTML=list.map(u=>\`<div class="row"><div class="who">\${esc(u.name)}<small>\${esc(u.email)}</small></div><span class="badge">\${u.role==="owner"?"Administrador":"Financeiro"}</span></div>\`).join("")||'<div class="empty">Nenhum usuário na equipe.</div>';$("#team-count").textContent=\`\${list.length} \${list.length===1?"pessoa":"pessoas"}\`}
 async function refreshAll(){const [me,dash,tx,sc,team]=await Promise.all([api("/api/me"),api("/api/dashboard"),api("/api/transactions"),api("/api/scenarios"),api("/api/team")]);state.me=me;state.dashboard=dash;state.transactions=tx.transactions;state.scenarios=sc.scenarios;state.team=team.users;renderAll()}
-function renderAll(){const m=state.me,d=state.dashboard;$("#company-line").textContent=m.company_name;$("#side-profile").textContent=m.name+" · "+m.email;$("#company-name").textContent=m.company_name;$("#company-plan").textContent=m.plan;$("#company-id").textContent=m.tenant_id;$("#my-role").textContent=m.role==="owner"?"Administrador":"Financeiro";$("#my-name").textContent=m.name;$("#my-email").textContent=m.email;$("#my-access").textContent=m.role==="owner"?"Administrador da empresa":"Acesso financeiro";$("#kpi-income").textContent=money(d.income_cents/100);$("#kpi-expense").textContent=money(d.expense_cents/100);$("#kpi-net").textContent=money(d.net_cents/100);$("#kpi-net").className="value "+(d.net_cents>=0?"positive":"");$("#kpi-count").textContent=d.count.toLocaleString("pt-BR");$("#kpi-count-note").textContent=d.count?"Registros nesta empresa":"Importe um CSV para começar";drawGraph(d.months);renderCategories(d.categories);renderTable(state.transactions.slice(0,6),"#recent-table");renderTable(state.transactions,"#transaction-table");$("#transaction-count").textContent=\`\${state.transactions.length} lançamentos\`;renderScenarios();renderTeam();updatePreview()}
-function updatePreview(){const bal=(state.dashboard?.net_cents||0)/100;const rate=Number($("#scenario-growth").value||0)/100;const months=Number($("#scenario-months").value||6);const value=bal*Math.pow(1+rate,months);$("#scenario-current").textContent=money(bal);$("#scenario-end").textContent=money(value);$("#scenario-end-label").textContent=\`Saldo projetado em \${months} \${months===1?"mês":"meses"}\`}
+function renderAll(){const m=state.me,d=state.dashboard;$("#company-line").textContent=m.company_name;$("#side-profile").textContent=m.name+" · "+m.email;$("#company-name").textContent=m.company_name;$("#company-plan").textContent=m.plan;$("#company-id").textContent=m.tenant_id;$("#my-role").textContent=m.role==="owner"?"Administrador":"Financeiro";$("#my-name").textContent=m.name;$("#my-email").textContent=m.email;$("#my-access").textContent=m.role==="owner"?"Administrador da empresa":"Acesso financeiro";$("#kpi-income").textContent=money(d.income_cents/100);$("#kpi-expense").textContent=money(d.expense_cents/100);$("#kpi-net").textContent=money(d.net_cents/100);$("#kpi-net").className="value "+(d.net_cents>=0?"positive":"");$("#kpi-count").textContent=d.count.toLocaleString("pt-BR");$("#kpi-count-note").textContent=d.count?"Registros nesta empresa":"Importe um CSV para começar";drawGraph(d.months);renderCategories(d.categories);renderTable(state.transactions.slice(0,6),"#recent-table");renderTable(state.transactions,"#transaction-table");$("#transaction-count").textContent=\`\${state.transactions.length} lançamentos\`;renderTeam();renderForecast(state.forecast)}
+
 function go(page){state.page=page;$$('.navbtn').forEach(b=>b.classList.toggle("active",b.dataset.page===page));$$('.page').forEach(p=>p.classList.toggle("active",p.id===\`page-\${page}\`));$("#page-title").textContent=({overview:"Visão geral",transactions:"Movimentações",projections:"Projeções",company:"Empresa e equipe"})[page];}
 $$('a[href="#acesso"]').forEach(a=>a.addEventListener("click",e=>{e.preventDefault();show(false);history.replaceState(null,"",location.pathname+"#acesso")}));$$('.navbtn').forEach(b=>b.addEventListener("click",()=>go(b.dataset.page)));$$('[data-goto]').forEach(b=>b.addEventListener("click",()=>go(b.dataset.goto)));$("#back-home").addEventListener("click",()=>{show(true);history.replaceState(null,"",location.pathname)});
 $("#login-form").addEventListener("submit",async e=>{e.preventDefault();const msg=$("#login-message");msg.textContent="";try{await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("#login-email").value,password:$("#login-password").value})});await showApp()}catch(err){msg.textContent=err.message}});
 $("#register-form").addEventListener("submit",async e=>{e.preventDefault();const msg=$("#register-message");msg.textContent="";try{await api("/api/auth/register",{method:"POST",body:JSON.stringify({name:$("#register-name").value,company:$("#register-company").value,email:$("#register-email").value,password:$("#register-password").value})});msg.style.color="var(--green)";msg.textContent="Cadastro recebido. O acesso será liberado após validação administrativa.";e.target.reset()}catch(err){msg.textContent=err.message}});
-$("#logout-button").addEventListener("click",()=>logout());$("#logout-top").addEventListener("click",()=>logout());$("#scenario-growth").addEventListener("input",updatePreview);$("#scenario-months").addEventListener("change",updatePreview);
-$("#scenario-form").addEventListener("submit",async e=>{e.preventDefault();const msg=$("#scenario-message");msg.textContent="";try{await api("/api/scenarios",{method:"POST",body:JSON.stringify({name:$("#scenario-name").value,monthly_growth:Number($("#scenario-growth").value),months:Number($("#scenario-months").value)})});await refreshAll();toast("Cenário salvo nesta empresa.")}catch(err){msg.textContent=err.message}});
+$("#logout-button").addEventListener("click",()=>logout());$("#logout-top").addEventListener("click",()=>logout());
+$("#forecast-form").addEventListener("submit",async e=>{e.preventDefault();const msg=$("#forecast-message");msg.textContent="";try{state.forecast=await api("/api/forecast",{method:"POST",body:JSON.stringify({opening_balance:Number($("#forecast-opening").value),history_months:Number($("#forecast-history").value),horizon_months:Number($("#forecast-horizon").value),revenue_growth:Number($("#forecast-revenue-growth").value),expense_growth:Number($("#forecast-expense-growth").value)})});renderForecast(state.forecast);toast("Premissas salvas e cenários recalculados.")}catch(err){msg.textContent=err.message}});
+
 $("#upload-csv").addEventListener("click",()=>$("#file-input").click());$("#file-input").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const result=await api("/api/transactions/import",{method:"POST",headers:{"content-type":"text/csv"},body:await file.text()});await refreshAll();toast(\`\${result.imported} lançamentos importados.\`)}catch(err){toast(err.message,true)}finally{e.target.value=""}});
 $("#demo-import").addEventListener("click",async()=>{if(state.transactions.length&&!confirm("A empresa já tem lançamentos. Deseja adicionar novamente os dados de demonstração?"))return;try{const result=await api("/api/transactions/import",{method:"POST",headers:{"content-type":"text/csv"},body:${JSON.stringify(DEMO_CSV)}});await refreshAll();toast(\`\${result.imported} registros fictícios importados.\`)}catch(err){toast(err.message,true)}});
 async function boot(){try{await api("/api/me");await showApp()}catch{if(location.hash==="#acesso"){show(false);return}show(true)}}boot();
@@ -419,6 +490,36 @@ async function handleApi(request, env, url) {
       await db.batch(stmts);
     } catch { return fail("A importação não foi concluída. Nenhum dado do arquivo atual deve ser considerado confirmado.", 500); }
     return json({ imported: rows.length });
+  }
+  if (path === "/api/forecast" && request.method === "GET") {
+    const saved = await db.prepare("SELECT opening_balance_cents,history_months,horizon_months,revenue_growth,expense_growth,updated_at FROM forecast_preferences WHERE tenant_id=?")
+      .bind(tenantId).first();
+    const preferences = {
+      opening_balance_cents: Number(saved?.opening_balance_cents || 0),
+      history_months: Number(saved?.history_months || 3),
+      horizon_months: Number(saved?.horizon_months || 6),
+      revenue_growth: Number(saved?.revenue_growth || 0),
+      expense_growth: Number(saved?.expense_growth || 0),
+      updated_at: saved?.updated_at || null,
+    };
+    return json(await buildForecast(db, tenantId, preferences));
+  }
+  if (path === "/api/forecast" && request.method === "POST") {
+    let input; try { input = await request.json(); } catch { return fail("Dados inválidos."); }
+    const openingBalance = Number(input.opening_balance), historyMonths = Number(input.history_months), horizonMonths = Number(input.horizon_months);
+    const revenueGrowth = Number(input.revenue_growth), expenseGrowth = Number(input.expense_growth);
+    if (!Number.isFinite(openingBalance) || Math.abs(openingBalance) > 100000000 || ![3,6].includes(historyMonths) || ![3,6,12].includes(horizonMonths) ||
+        !Number.isFinite(revenueGrowth) || revenueGrowth < -50 || revenueGrowth > 100 || !Number.isFinite(expenseGrowth) || expenseGrowth < -50 || expenseGrowth > 100) {
+      return fail("Confira saldo inicial, período e taxas de crescimento.");
+    }
+    const preferences = { opening_balance_cents: Math.round(openingBalance * 100), history_months: historyMonths,
+      horizon_months: horizonMonths, revenue_growth: revenueGrowth, expense_growth: expenseGrowth, updated_at: new Date().toISOString() };
+    await db.prepare(`INSERT INTO forecast_preferences (tenant_id,opening_balance_cents,history_months,horizon_months,revenue_growth,expense_growth,updated_by_user_id,updated_at)
+      VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tenant_id) DO UPDATE SET opening_balance_cents=excluded.opening_balance_cents,
+      history_months=excluded.history_months,horizon_months=excluded.horizon_months,revenue_growth=excluded.revenue_growth,
+      expense_growth=excluded.expense_growth,updated_by_user_id=excluded.updated_by_user_id,updated_at=excluded.updated_at`)
+      .bind(tenantId, preferences.opening_balance_cents, historyMonths, horizonMonths, revenueGrowth, expenseGrowth, user.id, preferences.updated_at).run();
+    return json(await buildForecast(db, tenantId, preferences));
   }
   if (path === "/api/scenarios" && request.method === "GET") {
     const result = await db.prepare("SELECT id, name, monthly_growth, months, base_cents, projected_cents, created_at FROM scenarios WHERE tenant_id=? ORDER BY created_at DESC LIMIT 50").bind(tenantId).all();
