@@ -305,14 +305,16 @@ async function main() {
   assert(auditA.data.audit.some(row=>row.transaction_id===created.data.id),"company A audit should retain its own movement history");
   assert(!auditB.data.audit.some(row=>row.transaction_id===created.data.id),"company B audit must not expose company A movement IDs or details");
 
-  sqlite.prepare("INSERT INTO company_profiles(tenant_id,legal_name,segment,subsegment,updated_at) VALUES(?,?,?,?,?)")
-    .run(companyA.tenant_id,"Empresa Sintética A","Tecnologia da informação","Software sob encomenda",new Date().toISOString());
-  sqlite.prepare("INSERT INTO company_profiles(tenant_id,legal_name,segment,subsegment,updated_at) VALUES(?,?,?,?,?)")
-    .run(companyB.tenant_id,"Empresa Sintética B","Financeiro","Fintech de crédito",new Date().toISOString());
+  sqlite.prepare("INSERT INTO company_profiles(tenant_id,legal_name,segment,subsegment,logo_data_url,updated_at) VALUES(?,?,?,?,?,?)")
+    .run(companyA.tenant_id,"Empresa Sintética A","Tecnologia da informação","Software sob encomenda","data:image/png;base64,YW1hbmVudGUtYQ==",new Date().toISOString());
+  sqlite.prepare("INSERT INTO company_profiles(tenant_id,legal_name,segment,subsegment,logo_data_url,updated_at) VALUES(?,?,?,?,?,?)")
+    .run(companyB.tenant_id,"Empresa Sintética B","Financeiro","Fintech de crédito","data:image/png;base64,YW1hbmVudGUtYg==",new Date().toISOString());
   const profileA=await call("/api/company/profile",{cookie:companyA.cookie});
   const profileB=await call("/api/company/profile",{cookie:companyB.cookie});
   assert.equal(profileA.data.profile.segment,"Tecnologia da informação");
   assert.equal(profileB.data.profile.segment,"Financeiro");
+  assert.equal(profileA.data.profile.logo_data_url,"data:image/png;base64,YW1hbmVudGUtYQ==");
+  assert.equal(profileB.data.profile.logo_data_url,"data:image/png;base64,YW1hbmVudGUtYg==","company profile reads must return only the requesting company's own logo");
   const savedPreferencesA=await call("/api/forecast",{method:"POST",cookie:companyA.cookie,body:{opening_balance:9876.54,history_months:6,horizon_months:12,revenue_growth:4,expense_growth:2}});
   const preferencesA=await call("/api/forecast",{cookie:companyA.cookie});
   const preferencesB=await call("/api/forecast",{cookie:companyB.cookie});
