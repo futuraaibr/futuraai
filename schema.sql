@@ -33,10 +33,45 @@ CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   date TEXT NOT NULL,
+  competence_date TEXT,
   description TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
   amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
   category TEXT NOT NULL,
+  category_source TEXT NOT NULL DEFAULT 'provided' CHECK (category_source IN ('provided', 'inferred')),
+  account_name TEXT NOT NULL DEFAULT '',
+  account_code TEXT NOT NULL DEFAULT '',
+  counterparty TEXT NOT NULL DEFAULT '',
+  cost_center TEXT NOT NULL DEFAULT '',
+  document_number TEXT NOT NULL DEFAULT '',
+  due_date TEXT,
+  payment_date TEXT,
+  payment_method TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  dedupe_key TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS dre_category_classifications (
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('income','expense')),
+  category TEXT NOT NULL,
+  dre_line TEXT NOT NULL CHECK (dre_line IN ('revenue','financial_income','other_income','deductions','direct_costs','operating_expenses','financial_expenses','other_expenses')),
+  updated_by_user_id TEXT NOT NULL REFERENCES users(id),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id,type,category)
+);
+
+CREATE TABLE IF NOT EXISTS transaction_audit (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  actor_id TEXT NOT NULL,
+  actor_name TEXT NOT NULL,
+  actor_email TEXT NOT NULL,
+  action TEXT NOT NULL,
+  transaction_id TEXT NOT NULL DEFAULT '',
+  details TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
 
@@ -56,6 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_sessions_token_expiry ON sessions(token_hash, expires_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_tenant_date ON transactions(tenant_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_tenant_category ON transactions(tenant_id, type, category);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_tenant_dedupe ON transactions(tenant_id, dedupe_key) WHERE dedupe_key != '';
+CREATE INDEX IF NOT EXISTS idx_transaction_audit_tenant_created ON transaction_audit(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scenarios_tenant_created ON scenarios(tenant_id, created_at DESC);
 
 -- Platform administration, account approval, and security audit.
@@ -209,4 +246,74 @@ CREATE TABLE IF NOT EXISTS ai_forecast_cache (
 CREATE TABLE IF NOT EXISTS ai_forecast_daily_usage (
   usage_date TEXT PRIMARY KEY,
   calls INTEGER NOT NULL DEFAULT 0 CHECK (calls >= 0 AND calls <= 50)
+);
+CREATE TABLE IF NOT EXISTS company_staff (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('employee','partner')),
+  position TEXT NOT NULL DEFAULT '',
+  reference_code TEXT NOT NULL DEFAULT '',
+  monthly_salary_cents INTEGER NOT NULL DEFAULT 0 CHECK (monthly_salary_cents >= 0),
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_company_staff_tenant_name ON company_staff(tenant_id,active,full_name);
+CREATE TABLE IF NOT EXISTS payroll_monthly_records (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  staff_id TEXT NOT NULL REFERENCES company_staff(id) ON DELETE CASCADE,
+  reference_month TEXT NOT NULL CHECK (reference_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+  taxable_income_cents INTEGER NOT NULL DEFAULT 0 CHECK (taxable_income_cents >= 0),
+  thirteenth_income_cents INTEGER NOT NULL DEFAULT 0 CHECK (thirteenth_income_cents >= 0),
+  exempt_income_cents INTEGER NOT NULL DEFAULT 0 CHECK (exempt_income_cents >= 0),
+  profit_distribution_cents INTEGER NOT NULL DEFAULT 0 CHECK (profit_distribution_cents >= 0),
+  social_security_cents INTEGER NOT NULL DEFAULT 0 CHECK (social_security_cents >= 0),
+  irrf_cents INTEGER NOT NULL DEFAULT 0 CHECK (irrf_cents >= 0),
+  actor_id TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(tenant_id,staff_id,reference_month),
+  UNIQUE(id,tenant_id),
+  FOREIGN KEY(staff_id,tenant_id) REFERENCES company_staff(id,tenant_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_payroll_tenant_month ON payroll_monthly_records(tenant_id,reference_month);
+CREATE TABLE IF NOT EXISTS staff_audit (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  actor_id TEXT NOT NULL,
+  actor_name TEXT NOT NULL,
+  action TEXT NOT NULL,
+  staff_id TEXT NOT NULL DEFAULT '',
+  details TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_staff_audit_tenant_created ON staff_audit(tenant_id,created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_company_staff_id_tenant ON company_staff(id,tenant_id);
+CREATE TABLE IF NOT EXISTS regulatory_monitor_runs (
+  year_month TEXT PRIMARY KEY,
+  checked_at TEXT NOT NULL,
+  sources_checked TEXT NOT NULL DEFAULT '',
+  result_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS regulatory_updates (
+  id TEXT PRIMARY KEY,
+  canonical_url TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  published_at TEXT NOT NULL DEFAULT '',
+  discovered_at TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_regulatory_updates_date ON regulatory_updates(published_at DESC,discovered_at DESC);
+
+CREATE TABLE IF NOT EXISTS dre_category_overrides (
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('income','expense')),
+  category TEXT NOT NULL,
+  dre_line TEXT NOT NULL CHECK (dre_line IN ('revenue','deductions','direct_costs','commercial_expenses','administrative_expenses','operating_expenses','other_operating_income','other_operating_expenses','depreciation','financial_income','financial_expenses','other_income','other_expenses','income_taxes','excluded','unclassified')),
+  updated_by_user_id TEXT NOT NULL REFERENCES users(id),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id,type,category)
 );
