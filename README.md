@@ -7,7 +7,7 @@ Aplicação B2B para gestão financeira e administração da plataforma. Interfa
 - Acesso por e-mail e senha com sessão `HttpOnly`, `Secure` e `SameSite=Strict`; senhas derivadas com PBKDF2-SHA-256.
 - Cadastros públicos aguardam validação do administrador antes de liberar o acesso.
 - Dashboard de receitas, despesas, saldo líquido, histórico mensal e categorias.
-- Previsão de caixa em cenários conservador, base e otimista, calculada a partir das receitas e despesas dos últimos 3 ou 6 meses completos; saldo inicial, horizonte e taxas podem ser ajustados e ficam salvos por empresa.
+- Previsão de caixa em cenários conservador, base e otimista, calculada a partir das receitas e despesas dos últimos 3 ou 6 meses completos com movimentação registrada; saldo inicial, horizonte e taxas podem ser ajustados e ficam salvos por empresa.
 - Importação CSV `data;descricao;tipo;valor;categoria`, com limite de 100 linhas e gravação atômica.
 - Área da empresa e consulta da equipe aprovada.
 - CSV de demonstração exclusivamente fictício.
