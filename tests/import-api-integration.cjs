@@ -180,6 +180,8 @@ async function main() {
   assert.equal(forecast.data.analysis_mode,"financial_fallback","forecast should remain usable and labeled if AI is unavailable");
   assert.equal(forecast.data.projection.length,6);
   assert.match(forecast.data.outlook,/faltam meses no histórico/);
+  assert.equal(forecast.data.news_status.reason,"live_search_fallback");
+  assert.equal(forecast.data.news[0].is_search_link,true,"an empty feed must be labeled as a live search, never as a published article");
 
   sqlite.close();
   console.log("Import API integration checks passed: login, exact synthetic totals, persistence, idempotent reimport, validation, read/write tenant isolation, audit consistency, atomic rollback, and sparse-history AI fallback.");
