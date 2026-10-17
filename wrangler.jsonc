@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "futura-ai-portal-hml",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-17",
+  "vars": {
+    "ENVIRONMENT": "homologacao"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "futura-ai-portal-hml",
+      "database_id": "9069f6c3-3a27-47f2-b133-edc22420394e"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
