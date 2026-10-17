@@ -1,21 +1,33 @@
 # FUTURA AI — Portal empresarial (homologação)
 
-Aplicação B2B para acompanhamento de receitas, despesas, dashboards financeiros e projeções. Interface em português, sem dependências externas, servida por Cloudflare Workers e persistida em Cloudflare D1.
+Aplicação B2B para gestão financeira e administração da plataforma. Interface em português, servida por Cloudflare Workers e persistida em Cloudflare D1.
 
-## O que já funciona
+## Portal da empresa
 
-- Criação de conta da empresa e acesso por e-mail e senha.
-- Sessão opaca em cookie `HttpOnly`, `Secure` e `SameSite=Strict`; senhas derivadas com PBKDF2-SHA-256.
-- Separação de dados por `tenant_id` em todas as consultas financeiras e de cenários.
-- Importação CSV no formato `data;descricao;tipo;valor;categoria` (até 100 linhas por importação).
-- Dashboard com receitas, despesas, saldo líquido, histórico mensal e categorias.
-- Cenários com crescimento mensal composto e horizonte de 3, 6 ou 12 meses.
-- Área da empresa e consulta da equipe cadastrada.
-- CSV de demonstração somente com dados fictícios.
+- Acesso por e-mail e senha com sessão `HttpOnly`, `Secure` e `SameSite=Strict`; senhas derivadas com PBKDF2-SHA-256.
+- Cadastros públicos aguardam validação do administrador antes de liberar o acesso.
+- Dashboard de receitas, despesas, saldo líquido, histórico mensal e categorias.
+- Importação CSV `data;descricao;tipo;valor;categoria`, com limite de 100 linhas e gravação atômica.
+- Cenários financeiros com crescimento composto e horizonte de 3, 6 ou 12 meses.
+- Área da empresa e consulta da equipe aprovada.
+- CSV de demonstração exclusivamente fictício.
 
-## Homologação
+## Portal do administrador
 
-O sistema está em homologação. Não inserir dados reais de clientes, colaboradores ou transações. O cadastro ainda não tem verificação de e-mail, recuperação de senha, cobrança, envio de convites ou painel de superadministrador. Os preços exibidos são apenas referências e não existe processamento de pagamentos.
+Acesse `/admin`. Não existe cadastro público de administradores. O painel permite:
+
+- Ver empresas, usuários, pendências e movimentações administrativas.
+- Cadastrar empresa e responsável, com senha temporária mostrada uma única vez.
+- Aprovar ou rejeitar cadastros de usuários.
+- Ativar, desativar ou redefinir a senha de usuários.
+- Ativar ou suspender empresas.
+- Consultar trilha de auditoria das ações administrativas.
+
+A conta inicial de administração e as credenciais de teste são provisionadas diretamente no ambiente de homologação; não devem ser publicadas neste repositório.
+
+## Homologação e segurança
+
+O sistema está em homologação. Não inserir dados reais de clientes, colaboradores ou transações. As credenciais da conta demonstrativa pertencem somente a esta instância. Os planos exibidos são referenciais; cobrança, verificação de e-mail e recuperação automática de senha ainda não estão habilitadas. O acesso administrativo tem sessão própria e limite de tentativas de autenticação.
 
 ## Rodar localmente
 
@@ -24,16 +36,16 @@ O sistema está em homologação. Não inserir dados reais de clientes, colabora
 3. Execute `npm run db:local`.
 4. Execute `npm run dev`.
 
-## Publicação Cloudflare
+## Banco e publicação
 
-O banco D1 de homologação já está configurado no `wrangler.jsonc`. Para publicar após instalar as dependências, aplique `schema.sql` no D1 remoto e use `npm run deploy`. Confirme `/api/health`, cadastro, login, persistência, importação e isolamento entre duas empresas sintéticas.
+O D1 de homologação está configurado no `wrangler.jsonc`. `schema.sql` cria as tabelas da aplicação, aprovação, sessões administrativas e auditoria. Para publicar após instalar as dependências, aplique `npm run db:remote` e use `npm run deploy`.
 
-## Validação financeira de referência
+## Dados de demonstração
 
-O arquivo `demo.csv` deve gerar receita total de **R$ 1.301,10**, despesas de **R$ 300,25** e saldo líquido de **R$ 1.000,85**. Todos os cinco registros são fictícios.
+A conta empresarial de teste contém cinco lançamentos fictícios. O CSV `demo.csv` deve gerar receita de **R$ 1.301,10**, despesas de **R$ 300,25** e saldo líquido de **R$ 1.000,85**. Não importar dados reais nesta instância.
 
 ## Limites conhecidos
 
-- A projeção aplica somente crescimento mensal composto ao saldo líquido importado; não considera impostos, sazonalidade, inflação ou compromissos futuros.
-- Cada importação CSV tem limite de 100 linhas e é persistida atomicamente.
-- A criação aberta de contas e a autenticação estão adequadas apenas à homologação inicial. Endurecer a política de cadastro, recuperação de acesso, rate limiting e revisão de segurança antes de operação com dados reais.
+- As projeções aplicam crescimento mensal composto ao saldo líquido importado; não consideram impostos, sazonalidade, inflação ou compromissos futuros.
+- A importação CSV aceita até 100 linhas por arquivo.
+- Esta implantação não está homologada para operação comercial com dados reais. Antes disso, completar verificação de e-mail, recuperação de acesso, cobrança, revisão independente de segurança e validação ponta a ponta em navegador.
