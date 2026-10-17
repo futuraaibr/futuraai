@@ -78,6 +78,14 @@ async function main() {
 
   const companyA = await registerAndLogin("Empresa Sintética A", "a@example.test");
   const companyB = await registerAndLogin("Empresa Sintética B", "b@example.test");
+  for(let attempt=1;attempt<=9;attempt++){
+    const denied=await call("/api/auth/login",{method:"POST",body:{email:"brute-force@example.test",password:"Senha-errada"}});
+    assert.equal(denied.response.status,attempt<=8?401:429,"company login must enforce its documented 15-minute attempt limit");
+  }
+  for(let attempt=1;attempt<=9;attempt++){
+    const denied=await call("/api/admin/login",{method:"POST",body:{email:"admin-brute-force@example.test",password:"Senha-errada"}});
+    assert.equal(denied.response.status,attempt<=8?401:429,"admin login must enforce its documented 15-minute attempt limit");
+  }
   const missingOriginRegistration=await call("/api/auth/register",{method:"POST",omitOrigin:true,body:{name:"Bloqueado",company:"Bloqueada",email:"sem-origem@example.test",password:"Senha-Interna-2026!"}});
   const foreignOriginRegistration=await call("/api/auth/register",{method:"POST",origin:"https://attacker.example",body:{name:"Bloqueado",company:"Bloqueada",email:"origem-estranha@example.test",password:"Senha-Interna-2026!"}});
   assert.equal(missingOriginRegistration.response.status,403,"cookie-authenticated mutation routes must reject requests without Origin");
@@ -87,11 +95,24 @@ async function main() {
   const adminToken = "a".repeat(64);
   const adminDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(adminToken));
   const adminTokenHash = [...new Uint8Array(adminDigest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  const adminPassword="Senha-Admin-Interna-2026!",adminSalt="salt-synthetic";
+  const adminKey=await crypto.subtle.importKey("raw",new TextEncoder().encode(adminPassword),"PBKDF2",false,["deriveBits"]);
+  const adminPasswordBits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(adminSalt),iterations:100000,hash:"SHA-256"},adminKey,256);
+  const adminPasswordHash=[...new Uint8Array(adminPasswordBits)].map(byte=>byte.toString(16).padStart(2,"0")).join("");
   sqlite.prepare("INSERT INTO platform_admins(id,name,email,password_hash,password_salt,status,created_at) VALUES(?,?,?,?,?,'active',?)")
-    .run("admin-synthetic", "Admin Sintético", "admin@example.test", "unused", "unused", new Date().toISOString());
+    .run("admin-synthetic", "Admin Sintético", "admin@example.test", adminPasswordHash, adminSalt, new Date().toISOString());
   sqlite.prepare("INSERT INTO admin_sessions(id,admin_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)")
     .run("admin-session-synthetic", "admin-synthetic", adminTokenHash, new Date(Date.now() + 3600000).toISOString(), new Date().toISOString());
   const adminCookie = `futura_admin_session=${adminToken}`;
+  const adminLogin=await call("/api/admin/login",{method:"POST",body:{email:"admin@example.test",password:adminPassword}});
+  assert.equal(adminLogin.response.status,200,"administrator must be able to establish a session with valid credentials");
+  assert.match(adminLogin.response.headers.get("set-cookie"),/HttpOnly; Secure; SameSite=Strict/,
+    "administrator session cookies must use protective attributes");
+  const realAdminCookie=adminLogin.response.headers.get("set-cookie").split(";")[0];
+  assert.equal((await call("/api/admin/me",{cookie:realAdminCookie})).response.status,200);
+  assert.equal((await call("/api/admin/logout",{method:"POST",cookie:realAdminCookie,body:{}})).response.status,200);
+  assert.equal((await call("/api/admin/me",{cookie:realAdminCookie})).response.status,401,
+    "administrator logout must invalidate its own session");
   const blockedAdmin = await call("/api/admin/companies");
   assert.equal(blockedAdmin.response.status, 401, "administrative routes must reject unauthenticated requests");
   const segmentCatalog = await call("/api/admin/segments", { cookie: adminCookie });
@@ -304,14 +325,43 @@ async function main() {
   assert.equal(financeBulkDelete.response.status,403,"finance role cannot erase all company transactions");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transactions WHERE tenant_id=?").get(companyB.tenant_id).n),3,
     "a denied bulk erase must not change company transactions");
-  const anonymousSensitiveRoutes=[
-    ["/api/company/profile","GET"],["/api/transactions","GET"],["/api/transactions/audit","GET"],
-    ["/api/dre?from=2026-10-01&to=2026-10-31","GET"],["/api/staff","GET"],
-    ["/api/payroll?year=2026","GET"],["/api/ai-forecast","GET"]
+  const protectedCompanyRoutes=[
+    ["/api/regulatory-updates","GET"],["/api/regulatory-updates/refresh","POST",{}],
+    ["/api/staff/import","POST",{people:[{full_name:"Teste",monthly_salary:"0"}]}],
+    ["/api/staff","GET"],["/api/staff","POST",{full_name:"Teste",monthly_salary:"0"}],
+    ["/api/payroll?year=2026","GET"],["/api/payroll","POST",{staff_id:"missing",reference_month:"2026-10"}],
+    ["/api/company/profile","GET"],["/api/sector-news","GET"],["/api/ai-forecast","GET"],
+    ["/api/dashboard?year=2026","GET"],["/api/dre?from=2026-10-01&to=2026-10-31","GET"],
+    ["/api/dre/categories","PUT",{type:"expense",category:"Teste",line:"operating_expenses"}],
+    ["/api/transactions/audit","GET"],["/api/transactions","GET"],
+    ["/api/transactions","POST",{date:"2026-10-08",description:"Teste",type:"income",amount:1,category:"Teste"}],
+    ["/api/transactions/synthetic","PUT",{date:"2026-10-08",description:"Teste",type:"income",amount:1,category:"Teste"}],
+    ["/api/transactions/synthetic","DELETE"],["/api/transactions","DELETE",{confirmation:"APAGAR TODOS"}],
+    ["/api/transactions/import","POST","data;descricao;tipo;valor\n2026-10-08;Teste;receita;1,00"],
+    ["/api/forecast","GET"],["/api/forecast","POST",{opening_balance:0,history_months:3,horizon_months:3,revenue_growth:0,expense_growth:0}],
+    ["/api/scenarios","GET"],["/api/scenarios","POST",{name:"Teste",monthly_growth:0,months:3}],
+    ["/api/team","GET"]
   ];
-  for(const [route,method] of anonymousSensitiveRoutes){
-    const denied=await call(route,{method});
-    assert.equal(denied.response.status,401,`${route} must reject requests without a company session`);
+  for(const [route,method,body] of protectedCompanyRoutes){
+    const denied=await call(route,{method,body});
+    assert.equal(denied.response.status,401,`${method} ${route} must reject requests without a company session`);
+  }
+  const protectedAdminRoutes=[
+    ["/api/admin/me","GET"],["/api/admin/dashboard","GET"],["/api/admin/finance","GET"],
+    ["/api/admin/finance/goal","GET"],["/api/admin/finance/goal","PUT",{}],
+    ["/api/admin/finance/entries","GET"],["/api/admin/finance/entries","POST",{}],
+    ["/api/admin/finance/entries/synthetic","DELETE"],["/api/admin/segments","GET"],
+    ["/api/admin/companies","GET"],["/api/admin/companies","POST",{}],
+    ["/api/admin/companies/synthetic","PATCH",{status:"suspended"}],
+    ["/api/admin/companies/synthetic/profile","GET"],["/api/admin/companies/synthetic/profile","PUT",{}],
+    ["/api/admin/users","GET"],["/api/admin/users/synthetic","PATCH",{status:"disabled"}],
+    ["/api/admin/users/synthetic/reset-password","POST",{}],["/api/admin/audit","GET"],
+    ["/api/admin/finance/companies/synthetic","GET"],["/api/admin/finance/companies/synthetic","PUT",{}],
+    ["/api/admin/finance/invoices/synthetic/send","POST",{}],["/api/admin/finance/invoices/synthetic/paid","POST",{}]
+  ];
+  for(const [route,method,body] of protectedAdminRoutes){
+    const denied=await call(route,{method,body});
+    assert.equal(denied.response.status,401,`${method} ${route} must reject requests without an admin session`);
   }
   sqlite.prepare("UPDATE users SET role='owner' WHERE id=?").run(companyB.id);
 
