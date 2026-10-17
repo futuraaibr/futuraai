@@ -201,8 +201,9 @@ async function main() {
   const originalFeedFetch=global.fetch;
   global.fetch=async input=>{
     const query=new URL(String(input)).searchParams.get("q")||"";
-    const title=query.toLocaleLowerCase("pt-BR").includes("software sob encomenda")?"Mercado de software sob encomenda cresce no Brasil":query.toLocaleLowerCase("pt-BR").includes("fintech de crédito")?"Fintech de crédito amplia serviços financeiros para empresas":"";
-    const rss=title?`<rss><channel><item><title>${title}</title><link>https://news.google.com/rss/articles/${encodeURIComponent(title)}</link><pubDate>Sat, 17 Oct 2026 09:00:00 GMT</pubDate><source>Portal Sintético</source></item></channel></rss>`:"<rss><channel></channel></rss>";
+    const item=(title,url,date="Sat, 17 Oct 2026 09:00:00 GMT")=>`<item><title>${title}</title><link>${url}</link><pubDate>${date}</pubDate><source>Portal Sintético</source></item>`;
+    const lower=query.toLocaleLowerCase("pt-BR");
+    const rss=lower.includes("software sob encomenda")?`<rss><channel>${item("Mercado de software sob encomenda cresce no Brasil","https://news.google.com/rss/articles/software-a")}${item("Mercado de software sob encomenda cresce no Brasil","https://news.google.com/rss/articles/software-a")}${item("Software sob encomenda em janeiro","https://news.google.com/rss/articles/software-old","Thu, 01 Jan 2026 09:00:00 GMT")}${item("Banco anuncia novas taxas de juros","https://news.google.com/rss/articles/bank-a")}</channel></rss>`:lower.includes("fintech de crédito")?`<rss><channel>${item("Fintech de crédito amplia serviços financeiros para empresas","https://news.google.com/rss/articles/finance-b")}</channel></rss>`:"<rss><channel></channel></rss>";
     return new Response(rss,{status:200,headers:{"content-type":"application/rss+xml"}});
   };
   let newsA,newsB;
@@ -212,9 +213,16 @@ async function main() {
   }finally{global.fetch=originalFeedFetch;}
   assert.equal(newsA.data.status.level,"segment");
   assert.equal(newsB.data.status.level,"segment");
+  assert.equal(newsA.data.items.length,1,"duplicate, old and unrelated headlines must be removed");
   assert.match(newsA.data.items[0].title,/software sob encomenda/i);
   assert.match(newsB.data.items[0].title,/fintech de crédito/i);
   assert.notEqual(newsA.data.items[0].title,newsB.data.items[0].title,"sector news must be independently selected per tenant");
+  global.fetch=async()=>{throw new Error("synthetic feed outage")};
+  let unavailableNews;
+  try{unavailableNews=await call("/api/sector-news",{cookie:companyA.cookie});}
+  finally{global.fetch=originalFeedFetch;}
+  assert.equal(unavailableNews.data.status.reason,"live_search_fallback");
+  assert.equal(unavailableNews.data.status.source_reason,"provider_unavailable","provider outage must be distinct from a valid feed with no recent articles");
 
   const monthOffset = offset => {
     const date = new Date();
@@ -246,6 +254,7 @@ async function main() {
   assert.equal(forecast.data.projection.length,6);
   assert.match(forecast.data.outlook,/faltam meses no histórico/);
   assert.equal(forecast.data.news_status.reason,"live_search_fallback");
+  assert.equal(forecast.data.news_status.source_reason,"no_recent_results");
   assert.equal(forecast.data.news[0].is_search_link,true,"an empty feed must be labeled as a live search, never as a published article");
 
   sqlite.close();
