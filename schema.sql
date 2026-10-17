@@ -116,3 +116,64 @@ CREATE TABLE IF NOT EXISTS forecast_preferences (
   updated_by_user_id TEXT REFERENCES users(id),
   updated_at TEXT NOT NULL
 );
+
+-- Billing visibility and collection settings managed by platform administrators.
+CREATE TABLE IF NOT EXISTS company_billing (
+  tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  billing_email TEXT NOT NULL DEFAULT '',
+  monthly_fee_cents INTEGER NOT NULL DEFAULT 0 CHECK (monthly_fee_cents >= 0),
+  next_due_date TEXT,
+  reminder_enabled INTEGER NOT NULL DEFAULT 0 CHECK (reminder_enabled IN (0,1)),
+  reminder_days_before INTEGER NOT NULL DEFAULT 3 CHECK (reminder_days_before IN (0,1,3,5,7)),
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS billing_invoices (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  period TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT 'Assinatura FUTURA AI',
+  amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+  due_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','canceled')),
+  paid_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (tenant_id, period)
+);
+
+CREATE TABLE IF NOT EXISTS project_financial_entries (
+  id TEXT PRIMARY KEY,
+  entry_type TEXT NOT NULL CHECK (entry_type IN ('income','expense')),
+  description TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Geral',
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  entry_date TEXT NOT NULL,
+  created_by_admin_id TEXT NOT NULL REFERENCES platform_admins(id),
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_financial_goals (
+  id TEXT PRIMARY KEY CHECK (id='default'),
+  target_mrr_cents INTEGER NOT NULL DEFAULT 0 CHECK (target_mrr_cents >= 0),
+  expected_new_companies_per_month REAL NOT NULL DEFAULT 1 CHECK (expected_new_companies_per_month >= 0 AND expected_new_companies_per_month <= 1000),
+  average_monthly_fee_cents INTEGER NOT NULL DEFAULT 29900 CHECK (average_monthly_fee_cents >= 0),
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS billing_email_log (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  invoice_id TEXT NOT NULL REFERENCES billing_invoices(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('manual','before_due','due_today')),
+  status TEXT NOT NULL CHECK (status IN ('sent','draft','blocked','failed')),
+  recipient TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  sent_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_billing_invoices_due ON billing_invoices(status,due_date);
+CREATE INDEX IF NOT EXISTS idx_billing_invoice_tenant ON billing_invoices(tenant_id,due_date DESC);
+CREATE INDEX IF NOT EXISTS idx_project_financial_date ON project_financial_entries(entry_date DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_email_tenant ON billing_email_log(tenant_id,created_at DESC);
