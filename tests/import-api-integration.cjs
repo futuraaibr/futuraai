@@ -14,9 +14,8 @@ async function main() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(fs.readFileSync(path.join(__dirname, "../schema.sql"), "utf8"));
 
-  const statement = sql => ({
-    bind(...params) {
-      return {
+  const statement = sql => {
+    const bind = (...params) => ({
         sql,
         params,
         async first() { return sqlite.prepare(sql).get(...params) ?? null; },
@@ -25,9 +24,9 @@ async function main() {
           const result = sqlite.prepare(sql).run(...params);
           return { meta: { changes: Number(result.changes || 0), last_row_id: Number(result.lastInsertRowid || 0) } };
         }
-      };
-    }
-  });
+    });
+    return { bind, first: () => bind().first(), all: () => bind().all(), run: () => bind().run() };
+  };
   const db = {
     prepare: statement,
     async batch(statements) {
@@ -76,6 +75,96 @@ async function main() {
 
   const companyA = await registerAndLogin("Empresa Sintética A", "a@example.test");
   const companyB = await registerAndLogin("Empresa Sintética B", "b@example.test");
+  const adminToken = "a".repeat(64);
+  const adminDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(adminToken));
+  const adminTokenHash = [...new Uint8Array(adminDigest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  sqlite.prepare("INSERT INTO platform_admins(id,name,email,password_hash,password_salt,status,created_at) VALUES(?,?,?,?,?,'active',?)")
+    .run("admin-synthetic", "Admin Sintético", "admin@example.test", "unused", "unused", new Date().toISOString());
+  sqlite.prepare("INSERT INTO admin_sessions(id,admin_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)")
+    .run("admin-session-synthetic", "admin-synthetic", adminTokenHash, new Date(Date.now() + 3600000).toISOString(), new Date().toISOString());
+  const adminCookie = `futura_admin_session=${adminToken}`;
+  const blockedAdmin = await call("/api/admin/companies");
+  assert.equal(blockedAdmin.response.status, 401, "administrative routes must reject unauthenticated requests");
+  const segmentCatalog = await call("/api/admin/segments", { cookie: adminCookie });
+  assert(segmentCatalog.data.sectors.some(group => group.name === "Serviços" && group.children.includes("Tecnologia e software")));
+
+  const createdCompany = await call("/api/admin/companies", { method: "POST", cookie: adminCookie, body: {
+    company: "Empresa Sintética C", owner_name: "Responsável Sintético", email: "c@example.test",
+    plan: "Profissional", segment: "Serviços", subsegment: "Tecnologia e software"
+  } });
+  assert.equal(createdCompany.response.status, 201, JSON.stringify(createdCompany.data));
+  assert(createdCompany.data.temporary_password.length >= 20, "new company credentials must be generated once for the administrator");
+  const companyList = await call("/api/admin/companies", { cookie: adminCookie });
+  assert(companyList.data.companies.some(company => company.name === "Empresa Sintética C"));
+  const companyC = sqlite.prepare("SELECT id,tenant_id FROM users WHERE email='c@example.test'").get();
+  const invalidProfile = await call(`/api/admin/companies/${encodeURIComponent(companyC.tenant_id)}/profile`, {
+    method: "PUT", cookie: adminCookie, body: { name: "Empresa Sintética C", segment: "Serviços", subsegment: "Financeiro" }
+  });
+  assert.equal(invalidProfile.response.status, 400, "an invalid segment pairing must not be saved");
+  const profileSaved = await call(`/api/admin/companies/${encodeURIComponent(companyC.tenant_id)}/profile`, {
+    method: "PUT", cookie: adminCookie, body: {
+      name: "Empresa Sintética C Atualizada", legal_name: "Empresa Sintética C Ltda", cnpj: "12345678000199",
+      address: "Rua de Testes, 10", city: "São Paulo", state: "SP", postal_code: "01000000",
+      responsible_name: "Responsável Sintético", responsible_role: "Sócio", phone: "11999990000",
+      business_email: "financeiro@example.test", segment: "Serviços", subsegment: "Tecnologia e software"
+    }
+  });
+  assert.equal(profileSaved.response.status, 200, JSON.stringify(profileSaved.data));
+  assert.equal(profileSaved.data.profile.cnpj, "12345678000199");
+  assert.equal(profileSaved.data.profile.subsegment, "Tecnologia e software");
+  assert(sqlite.prepare("SELECT 1 FROM admin_audit WHERE admin_id=? AND action='perfil_empresa_atualizado'").get("admin-synthetic"));
+
+  const usersList = await call("/api/admin/users", { cookie: adminCookie });
+  assert(usersList.data.users.some(user => user.id === companyC.id && user.review_status === "approved"));
+  const resetPassword = await call(`/api/admin/users/${encodeURIComponent(companyC.id)}/reset-password`, { method: "POST", cookie: adminCookie, body: {} });
+  assert.equal(resetPassword.response.status, 200);
+  assert(resetPassword.data.temporary_password.length >= 20);
+  assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id=?").get(companyC.id).n), 0,
+    "password reset must invalidate existing user sessions");
+  const disabledUser = await call(`/api/admin/users/${encodeURIComponent(companyC.id)}`, { method: "PATCH", cookie: adminCookie, body: { status: "disabled" } });
+  assert.equal(disabledUser.response.status, 200);
+  assert.equal(sqlite.prepare("SELECT status FROM users WHERE id=?").get(companyC.id).status, "disabled");
+
+  const noEmailReminder = await call(`/api/admin/finance/companies/${encodeURIComponent(companyA.tenant_id)}`, {
+    method: "PUT", cookie: adminCookie, body: { billing_email: "cobranca@example.test", monthly_fee: 300, due_date: "2026-11-10", reminder_enabled: true, reminder_days_before: 3 }
+  });
+  assert.equal(noEmailReminder.response.status, 503, "automatic reminders must stay disabled without the email provider");
+  const billingSaved = await call(`/api/admin/finance/companies/${encodeURIComponent(companyA.tenant_id)}`, {
+    method: "PUT", cookie: adminCookie, body: { billing_email: "cobranca@example.test", monthly_fee: 300, due_date: "2026-11-10", reminder_enabled: false, reminder_days_before: 3 }
+  });
+  assert.equal(billingSaved.response.status, 200, JSON.stringify(billingSaved.data));
+  const invoice = sqlite.prepare("SELECT id,amount_cents,status FROM billing_invoices WHERE tenant_id=? AND period='2026-11'").get(companyA.tenant_id);
+  assert.equal(invoice.amount_cents, 30000);
+  const manualReminder = await call(`/api/admin/finance/invoices/${encodeURIComponent(invoice.id)}/send`, { method: "POST", cookie: adminCookie, body: {} });
+  assert.equal(manualReminder.response.status, 200);
+  assert.equal(manualReminder.data.status, "draft", "manual reminder without email configuration must return an explicit draft");
+  assert.match(manualReminder.data.mailto, /^mailto:/);
+  assert.equal(sqlite.prepare("SELECT status FROM billing_email_log WHERE invoice_id=?").get(invoice.id).status, "draft");
+  const paidInvoice = await call(`/api/admin/finance/invoices/${encodeURIComponent(invoice.id)}/paid`, { method: "POST", cookie: adminCookie, body: {} });
+  assert.equal(paidInvoice.response.status, 200, JSON.stringify(paidInvoice.data));
+  assert.equal(paidInvoice.data.next_due_date, "2026-12-10");
+
+  const goalSaved = await call("/api/admin/finance/goal", { method: "PUT", cookie: adminCookie, body: {
+    target_mrr: 5000, expected_new_companies_per_month: 2, average_monthly_fee: 300
+  } });
+  assert.equal(goalSaved.response.status, 200);
+  assert.equal(goalSaved.data.target_mrr_cents, 500000);
+  assert.equal(goalSaved.data.months_to_goal, 8);
+  const projectDate = new Date().toISOString().slice(0, 10);
+  for (const [entry_type, description, amount] of [["income", "Receita sintética do projeto", 1000.25], ["expense", "Despesa sintética do projeto", 200.25]]) {
+    const entry = await call("/api/admin/finance/entries", { method: "POST", cookie: adminCookie, body: { entry_type, description, category: "Teste", amount, entry_date: projectDate } });
+    assert.equal(entry.response.status, 201, JSON.stringify(entry.data));
+  }
+  const projectFinance = await call("/api/admin/finance", { cookie: adminCookie });
+  assert.equal(projectFinance.data.summary.mrr_cents, 30000);
+  assert.equal(projectFinance.data.summary.month_project_income_cents, 100025);
+  assert.equal(projectFinance.data.summary.month_project_expense_cents, 20025);
+  assert.equal(projectFinance.data.summary.month_project_net_cents, 80000);
+  const projectEntryId = sqlite.prepare("SELECT id FROM project_financial_entries WHERE description='Despesa sintética do projeto'").get().id;
+  const projectEntryDeleted = await call(`/api/admin/finance/entries/${encodeURIComponent(projectEntryId)}`, { method: "DELETE", cookie: adminCookie });
+  assert.equal(projectEntryDeleted.response.status, 200);
+  assert(sqlite.prepare("SELECT 1 FROM admin_audit WHERE action='lancamento_financeiro_projeto_removido'").get());
+
   const csv = "data;descricao;tipo;valor;categoria;centro_custo\n" +
     "2026-10-01;Recebimento de cliente;receita;1.301,10;Serviços;Comercial\n" +
     "2026-10-03;Aluguel;despesa;100,00;Ocupação;Administrativo\n" +
@@ -258,7 +347,7 @@ async function main() {
   assert.equal(forecast.data.news[0].is_search_link,true,"an empty feed must be labeled as a live search, never as a published article");
 
   sqlite.close();
-  console.log("API integration checks passed: exact synthetic totals, period/dashboard reconciliation, DRE/staff/payroll tenant isolation, personalized news, idempotent import, audit consistency, atomic rollback, zero payroll amounts, and sparse-history AI fallback.");
+  console.log("API integration checks passed: company/admin lifecycle, billing and project finance, exact synthetic totals, period/dashboard reconciliation, DRE/staff/payroll tenant isolation, personalized news, idempotent import, audit consistency, atomic rollback, zero payroll amounts, and sparse-history AI fallback.");
 }
 
 main().catch(error => {
