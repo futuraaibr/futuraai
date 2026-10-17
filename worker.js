@@ -34,7 +34,7 @@ function safeEqual(a, b) {
 
 async function hashPassword(password, salt) {
   const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: encoder.encode(salt), iterations: 150000, hash: "SHA-256" }, key, 256);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: encoder.encode(salt), iterations: 100000, hash: "SHA-256" }, key, 256);
   return bytesToHex(bits);
 }
 
@@ -451,7 +451,7 @@ export default {
     if (url.pathname === "/demo.csv") return new Response(DEMO_CSV, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": "attachment; filename=futuraai-dados-demo.csv", "cache-control": "no-store" } });
     if (url.pathname.startsWith("/api/")) {
       try { return await handleApi(request, env, url); }
-      catch { return fail("Erro interno. Tente novamente.", 500); }
+      catch (error) { console.error("API request failed", request.method, url.pathname, error?.stack || error); return fail("Erro interno. Tente novamente.", 500); }
     }
     if (request.method !== "GET" && request.method !== "HEAD") return fail("Método não permitido.", 405);
     return new Response(APP_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", "x-frame-options": "DENY", "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" } });
