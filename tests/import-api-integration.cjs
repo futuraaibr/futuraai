@@ -136,12 +136,21 @@ async function main() {
       name: "Empresa Sintética C Atualizada", legal_name: "Empresa Sintética C Ltda", cnpj: "12345678000199",
       address: "Rua de Testes, 10", city: "São Paulo", state: "SP", postal_code: "01000000",
       responsible_name: "Responsável Sintético", responsible_role: "Sócio", phone: "11999990000",
-      business_email: "financeiro@example.test", segment: "Serviços", subsegment: "Tecnologia e software"
+      business_email: "financeiro@example.test", segment: "Serviços", subsegment: "Tecnologia e software",
+      logo_data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pU8AAAAASUVORK5CYII="
     }
   });
   assert.equal(profileSaved.response.status, 200, JSON.stringify(profileSaved.data));
   assert.equal(profileSaved.data.profile.cnpj, "12345678000199");
   assert.equal(profileSaved.data.profile.subsegment, "Tecnologia e software");
+  assert.equal(profileSaved.data.profile.logo_data_url,"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pU8AAAAASUVORK5CYII=");
+  const svgLogo=await call(`/api/admin/companies/${encodeURIComponent(companyC.tenant_id)}/profile`,{method:"PUT",cookie:adminCookie,body:{name:"Empresa Sintética C Atualizada",segment:"Serviços",subsegment:"Tecnologia e software",logo_data_url:"data:image/svg+xml;base64,PHN2Zz4="}});
+  assert.equal(svgLogo.response.status,400,"active content such as SVG must not be accepted as a company logo");
+  const oversizedLogo=await call(`/api/admin/companies/${encodeURIComponent(companyC.tenant_id)}/profile`,{method:"PUT",cookie:adminCookie,body:{name:"Empresa Sintética C Atualizada",segment:"Serviços",subsegment:"Tecnologia e software",logo_data_url:`data:image/png;base64,${"A".repeat(210001)}`}});
+  assert.equal(oversizedLogo.response.status,400,"oversized company logos must be rejected before saving");
+  const profileAfterRejectedLogos=await call(`/api/admin/companies/${encodeURIComponent(companyC.tenant_id)}/profile`,{cookie:adminCookie});
+  assert.equal(profileAfterRejectedLogos.data.profile.logo_data_url,profileSaved.data.profile.logo_data_url,
+    "rejected logo uploads must leave the previously saved company branding intact");
   assert(sqlite.prepare("SELECT 1 FROM admin_audit WHERE admin_id=? AND action='perfil_empresa_atualizado'").get("admin-synthetic"));
 
   const usersList = await call("/api/admin/users", { cookie: adminCookie });
