@@ -7,7 +7,7 @@
 **Estado: em andamento; não aprovada para teste externo.**
 
 - Linha de base e código do projeto identificados; as mudanças estão sendo verificadas localmente com dados fictícios.
-- Importação CSV/TSV: validação de débito/crédito, sinais contábeis, datas, duplicados por centro de custo e atomicidade aprimoradas. O leitor XLSX já existe no painel, mas ainda precisa de regressões automatizadas para diferentes arquivos; mapeamento de colunas/abas e prévia ponta a ponta continuam pendentes.
+- Importação CSV/TSV: validação de débito/crédito, sinais contábeis, datas, duplicados por centro de custo e atomicidade aprimoradas. O leitor XLSX existente ganhou um teste sintético de aba/cabeçalho/valores; cobertura de exportações reais, mapeamento guiado e prévia ponta a ponta continuam pendentes.
 - Movimentações: testes de criação, edição, exclusão, auditoria antes/depois, idempotência de importação e bloqueio de acesso cruzado entre duas empresas passaram.
 - Indicadores: telas de movimentação passaram a dizer “resultado do período” e “margem de caixa” para não apresentar fluxo de caixa como lucro contábil. A revisão completa de períodos e reconciliação continua pendente.
 - Previsão: meses sem lançamentos agora são diferenciados de meses com faturamento zero; sem os seis meses preenchidos, o cálculo não infere crescimento e exibe cobertura/limitação. O endpoint também possui contingência determinística quando Workers AI não está disponível.
