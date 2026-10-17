@@ -36,7 +36,7 @@ A conta inicial de administração e as credenciais de teste são provisionadas 
 
 O sistema está em homologação. Não inserir dados reais de clientes, colaboradores ou transações. As credenciais da conta demonstrativa pertencem somente a esta instância. Os valores de mensalidade precisam ser configurados pelo administrador. O envio transacional ainda depende de domínio remetente verificado e binding de e-mail habilitada na Cloudflare; sem isso, a cobrança manual abre um rascunho no aplicativo de e-mail e os lembretes automáticos ficam desabilitados. O acesso administrativo tem sessão própria e limite de tentativas de autenticação.
 
-Workers AI usa a alocação gratuita diária da Cloudflare: o portal limita novas análises a uma inferência por dia para toda a implantação, e conserva o último relatório por 24 horas. A Cloudflare documenta 10.000 neurons diários gratuitos; no plano pago, o excedente pode ser cobrado. A previsão só executa quando alguém clica em “Gerar análise”. Notícias são buscadas naquele momento via Google News RSS e são apresentadas com link e data.
+Ao abrir o painel da empresa, a análise setorial é solicitada automaticamente quando há segmento cadastrado. O código aplica limite de 50 chamadas diárias para toda a implantação e guarda o último relatório por empresa. Esse limite global é proteção de homologação, não uma política adequada para planos pagos. Notícias são consultadas via Google News RSS e apresentadas com link e data; o sistema usa títulos/fontes, não uma integração validada com dados completos de mercado.
 
 ## Rodar localmente
 
@@ -59,4 +59,11 @@ A conta empresarial de teste contém cinco lançamentos fictícios. O CSV `demo.
 - Esta implantação não está homologada para operação comercial com dados reais. Antes disso, completar verificação de e-mail, recuperação de acesso, cobrança, revisão independente de segurança e validação ponta a ponta em navegador.
 - A previsão da empresa estima entradas e saídas recorrentes com base na média histórica e nas taxas informadas. Não incorpora automaticamente contas a receber/pagar futuras ainda não lançadas, sazonalidade ou saldo bancário; o saldo inicial deve ser informado pela empresa.
 - A previsão financeira administrativa é uma estimativa linear de receita recorrente baseada na base ativa, ticket médio e novos clientes mensais informados; não é uma garantia de vendas ou recebimentos.
-- A previsão setorial é uma estimativa orientativa: projeções numéricas combinam a tendência recente dos lançamentos com ajustes limitados sugeridos pela IA, e podem não refletir sazonalidade, alterações locais ou notícias sem cobertura no feed. Exige segmento definido no cadastro e depende da disponibilidade do feed e do Workers AI.
+- A previsão setorial é uma estimativa orientativa: projeções numéricas combinam a tendência recente dos lançamentos com ajustes limitados sugeridos pela IA, e podem não refletir sazonalidade, alterações locais ou notícias sem cobertura no feed. Exige segmento definido no cadastro e depende da disponibilidade do feed e do Workers AI. A acurácia ainda não foi medida por backtest.
+- O limite de 50 chamadas é compartilhado por todas as empresas da homologação; não há quota por cliente ou plano. Crescer o número de empresas sem redesenhar esse controle pode limitar a atualização das análises.
+- A tela de acesso público não tem checkout ativo. Os antigos valores de R$ 299, R$ 999 e R$ 2.499 foram retirados como oferta; consulte `ESTRATEGIA_COMERCIAL.md` para hipóteses de preço e gates de lançamento.
+- A página `futura-ai.polsia.io` é uma publicação separada que ainda apresenta estados e promessas diferentes desta Worker. Consolidar uma única experiência pública é requisito antes de divulgar o produto.
+
+## Direção comercial
+
+Leia [`ESTRATEGIA_COMERCIAL.md`](ESTRATEGIA_COMERCIAL.md) para o posicionamento, o primeiro perfil de empresa a validar, as hipóteses de preço, a reconciliação da meta de ARR e os requisitos para lançamento comercial.
