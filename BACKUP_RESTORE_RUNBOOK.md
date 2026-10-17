@@ -4,9 +4,10 @@
 
 - O `wrangler.jsonc` aponta para uma única base D1 chamada `futura-ai-portal-hml`.
 - A base usa o mecanismo de armazenamento `production` do D1 e tem 27 tabelas.
-- A API da Cloudflare retornou um bookmark atual de Time Travel. Não foi solicitado nem executado restore remoto.
+- A API da Cloudflare retornou um bookmark atual de Time Travel para a base principal.
 - A verificação de restauração feita no CI usa apenas SQLite e registros sintéticos, em diretório temporário que é apagado ao final.
-- O restore de Time Travel substitui a base no lugar. Por isso, é obrigatório fazer o exercício remoto em uma segunda base contendo somente dados sintéticos; a base atual não é alvo de teste destrutivo.
+- Ensaio remoto concluído em uma D1 descartável: schema real aplicado, empresa/usuário/movimento/auditoria sintéticos inseridos, bookmark capturado, outro movimento inserido e rollback executado. As consultas confirmaram que o primeiro movimento e a auditoria permaneceram, o segundo foi revertido e as tabelas continuaram disponíveis. A D1 temporária foi apagada depois da conferência.
+- O restore de Time Travel substitui a base no lugar. A D1 principal não foi alvo do ensaio e não houve exportação de seus dados.
 
 ## Recuperação rápida com D1 Time Travel
 
@@ -25,7 +26,7 @@ npx wrangler d1 time-travel restore futura-ai-portal-hml --bookmark='<BOOKMARK_C
 
 Depois de qualquer recuperação, conferir tabelas e contagens esperadas por empresa, login, movimentações, trilha de auditoria e um relatório financeiro sintético. Guardar o bookmark de reversão mostrado no resultado do restore.
 
-## Exercício remoto ainda pendente
+## Próximo ensaio remoto periódico
 
 1. Criar uma base D1 separada e identificá-la como ambiente de exercício, sem ligar o Worker empresarial a ela.
 2. Aplicar `schema.sql` e as migrações suportadas pelo projeto.
