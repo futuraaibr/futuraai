@@ -6,12 +6,18 @@ Aplicação B2B para gestão financeira e administração da plataforma. Interfa
 
 - Acesso por e-mail e senha com sessão `HttpOnly`, `Secure` e `SameSite=Strict`; senhas derivadas com PBKDF2-SHA-256.
 - Cadastros públicos aguardam validação do administrador antes de liberar o acesso.
-- Dashboard de receitas, despesas, saldo líquido, histórico mensal e categorias.
-- Na visão geral, análise setorial que cruza até seis meses de movimentações com notícias recentes, estima receitas, despesas, lucro e margem nos seis meses seguintes e recomenda ações; as notícias são citadas no próprio relatório.
+- Dashboard da empresa filtrado pelo exercício selecionado (2026 por padrão), com período, total de lançamentos e base de datas explicitados; gráficos, categorias e recentes usam esse mesmo recorte.
+- Na visão geral, análise setorial que cruza seis meses de movimentações, categorias que pesam no caixa, segmento detalhado, localidade e notícias recentes; as recomendações trazem contexto de receita/despesa e links de notícias quando disponíveis. As projeções são estimativas, não garantias.
 - Filtro de movimentações para 30, 60 ou 90 dias, histórico completo ou intervalo personalizado, com resumo de faturamento, despesas, lucro líquido e margem.
+- DRE gerencial por período, calculada a partir das categorias dos lançamentos, com receita bruta/líquida, custos diretos, despesas, resultado financeiro, lucro líquido estimado e margem. Usa a data de competência quando informada; na ausência, usa a data do lançamento e identifica essa limitação. A importação reconhece a coluna competência e a prévia mostra as duas datas. As classificações automáticas podem ser ajustadas por empresa e ficam na auditoria; o relatório não substitui escrituração por competência nem ajustes contábeis.
 - Previsão de caixa em cenários conservador, base e otimista, calculada a partir das receitas e despesas dos últimos 3 ou 6 meses completos com movimentação registrada; saldo inicial, horizonte e taxas podem ser ajustados e ficam salvos por empresa.
-- Importação CSV `data;descricao;tipo;valor;categoria`, com limite de 100 linhas e gravação atômica.
-- Área da empresa e consulta da equipe aprovada.
+- Importação de planilhas Excel `.xlsx`, CSV e TSV, com escolha da aba, linha de cabeçalho e associação das colunas; ao confirmar, o botão mostra “Importando dados…” até terminar. Planilhas `.xls` antigas devem ser convertidas para `.xlsx` ou CSV. A prévia mostra lançamentos e totais antes da confirmação. Suporta cabeçalhos em português ou inglês, até 500 lançamentos e gravação atômica. Reimportações repetidas ignoram lançamentos com a mesma data, tipo, valor e identificadores contábeis disponíveis; a interface informa quantos foram ignorados. Reconhece data, descrição/histórico e valor único ou colunas separadas de débito/crédito; categoria pode faltar. Guarda também conta contábil, código de conta, contraparte, centro de custo, documento, vencimento, pagamento, forma, status e observações quando presentes. Categorias inferidas ficam marcadas como sugestões para revisão.
+- Inclusão, edição e exclusão manual de lançamentos. O sistema avisa quando a movimentação parece repetida e permite confirmar casos legítimos.
+- Auditoria por empresa para importações, inclusões, edições, exclusões e limpeza do histórico, identificando usuário e horário.
+- Administradores da empresa podem apagar todos os lançamentos após confirmação digitada; a auditoria preserva a quantidade e os totais apagados. Essa ação não remove os registros de auditoria.
+- Cadastro de empregados e sócios, quantidade, cargo, situação e salário-base; lançamento mensal manual de pagamentos e retenções ou importação de planilha com prévia. Mudanças ficam em auditoria.
+- Módulo de prévia do Informe de Rendimentos por beneficiário, com exercício/ano-calendário visíveis, soma de valores mensais efetivamente registrados e impressão individual. CPF é solicitado na impressão e não é guardado. O documento é gerencial e precisa ser validado pela folha/contabilidade antes de entrega.
+- Radar regulatório mensal com publicações oficiais da Receita Federal, eSocial e EFD-Reinf, verificação manual e fontes vinculadas. O Worker verifica automaticamente no primeiro disparo diário de cada mês.
 - CSV de demonstração exclusivamente fictício.
 
 ## Portal do administrador
@@ -36,7 +42,7 @@ A conta inicial de administração e as credenciais de teste são provisionadas 
 
 O sistema está em homologação. Não inserir dados reais de clientes, colaboradores ou transações. As credenciais da conta demonstrativa pertencem somente a esta instância. Os valores de mensalidade precisam ser configurados pelo administrador. O envio transacional ainda depende de domínio remetente verificado e binding de e-mail habilitada na Cloudflare; sem isso, a cobrança manual abre um rascunho no aplicativo de e-mail e os lembretes automáticos ficam desabilitados. O acesso administrativo tem sessão própria e limite de tentativas de autenticação.
 
-Workers AI usa a alocação gratuita diária da Cloudflare: o portal limita novas análises a uma inferência por dia para toda a implantação, e conserva o último relatório por 24 horas. A Cloudflare documenta 10.000 neurons diários gratuitos; no plano pago, o excedente pode ser cobrado. A previsão só executa quando alguém clica em “Gerar análise”. Notícias são buscadas naquele momento via Google News RSS e são apresentadas com link e data.
+Ao abrir o painel da empresa, a análise setorial é solicitada automaticamente quando há segmento cadastrado. O código aplica limite de 50 chamadas diárias para toda a implantação e guarda o último relatório por empresa. Esse limite global é proteção de homologação, não uma política adequada para planos pagos. Notícias são consultadas via Google News RSS e apresentadas com link e data; o sistema usa títulos/fontes, não uma integração validada com dados completos de mercado.
 
 ## Rodar localmente
 
@@ -47,7 +53,7 @@ Workers AI usa a alocação gratuita diária da Cloudflare: o portal limita nova
 
 ## Banco e publicação
 
-O D1 de homologação está configurado no `wrangler.jsonc`. `schema.sql` cria as tabelas da aplicação, aprovação, sessões administrativas, auditoria, perfis empresariais e controle/cache de previsões. A binding `AI` conecta o portal ao Workers AI. Para publicar após instalar as dependências, aplique `npm run db:remote` e use `npm run deploy`.
+O D1 de homologação está configurado no `wrangler.jsonc`. `schema.sql` cria as tabelas da aplicação, aprovação, sessões administrativas, trilhas de auditoria, perfis empresariais, previsões, equipe, folha e radar regulatório. As migrações em `migrations/` incluem auditoria e deduplicação das movimentações, classificação DRE, competência, folha/equipe e monitor regulatório. A binding `AI` conecta o portal ao Workers AI. Para publicar após instalar as dependências, aplique `npm run db:remote` e use `npm run deploy`.
 
 ## Dados de demonstração
 
@@ -55,8 +61,15 @@ A conta empresarial de teste contém cinco lançamentos fictícios. O CSV `demo.
 
 ## Limites conhecidos
 
-- A importação CSV aceita até 100 linhas por arquivo.
+- A importação aceita até 500 linhas por arquivo. Arquivos `.xls` antigos precisam ser salvos como `.xlsx` ou CSV antes do envio. A deduplicação compara data, tipo, valor, descrição e identificadores contábeis; dois lançamentos verdadeiros sem identificadores diferentes podem parecer iguais. Nesses casos, confirme a duplicidade na inclusão manual e use documento, conta ou contraparte para diferenciá-los nos arquivos. Os mapeamentos de cabeçalho e as categorias sugeridas seguem regras heurísticas; revise classificações antes de usar em relatórios oficiais ou obrigações fiscais.
 - Esta implantação não está homologada para operação comercial com dados reais. Antes disso, completar verificação de e-mail, recuperação de acesso, cobrança, revisão independente de segurança e validação ponta a ponta em navegador.
 - A previsão da empresa estima entradas e saídas recorrentes com base na média histórica e nas taxas informadas. Não incorpora automaticamente contas a receber/pagar futuras ainda não lançadas, sazonalidade ou saldo bancário; o saldo inicial deve ser informado pela empresa.
 - A previsão financeira administrativa é uma estimativa linear de receita recorrente baseada na base ativa, ticket médio e novos clientes mensais informados; não é uma garantia de vendas ou recebimentos.
-- A previsão setorial é uma estimativa orientativa: projeções numéricas combinam a tendência recente dos lançamentos com ajustes limitados sugeridos pela IA, e podem não refletir sazonalidade, alterações locais ou notícias sem cobertura no feed. Exige segmento definido no cadastro e depende da disponibilidade do feed e do Workers AI.
+- A previsão setorial é uma estimativa orientativa: projeções numéricas combinam a tendência recente dos lançamentos com ajustes limitados sugeridos pela IA, e podem não refletir sazonalidade, alterações locais ou notícias sem cobertura no feed. Exige segmento definido no cadastro e depende da disponibilidade do feed e do Workers AI. A acurácia ainda não foi medida por backtest.
+- O limite de 50 chamadas é compartilhado por todas as empresas da homologação; não há quota por cliente ou plano. Crescer o número de empresas sem redesenhar esse controle pode limitar a atualização das análises.
+- A tela de acesso público não tem checkout ativo. Os antigos valores de R$ 299, R$ 999 e R$ 2.499 foram retirados como oferta; consulte `ESTRATEGIA_COMERCIAL.md` para hipóteses de preço e gates de lançamento.
+- A implantação continua em homologação; confira a versão no domínio público conectado antes de divulgar mudanças como disponibilidade comercial.
+
+## Direção comercial
+
+Leia [`ESTRATEGIA_COMERCIAL.md`](ESTRATEGIA_COMERCIAL.md) para o posicionamento, o primeiro perfil de empresa a validar, as hipóteses de preço, a reconciliação da meta de ARR e os requisitos para lançamento comercial.
