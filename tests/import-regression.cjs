@@ -41,6 +41,8 @@ expectParseError("data;descricao;valor\n2026-10-17;Venda", "quantidade de coluna
 expectParseError("data;valor\n2026-10-17;100,00", "colunas obrigatórias");
 
 assert.equal(parseMoney("R$ 1.234,56"), 123456);
+assert.equal(parseMoney(0), 0, "a numeric zero is valid, not a missing amount");
+assert.equal(parseMoney("0,00"), 0, "zero-valued payroll fields must remain valid");
 assert.equal(parseMoney("(250,00)"), -25000, "accounting parentheses are negative values");
 assert.equal(parseMoney("(1.234,56)"), -123456);
 
