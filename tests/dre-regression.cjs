@@ -38,6 +38,12 @@ assert.equal(b.summary.income_cents, 10000000);
 assert.equal(b.summary.net_income_cents, 5000000);
 assert.equal(b.summary.excluded_count, 1);
 
+const duplicateSet=[row("dup1","income",100000,"Vendas","Venda repetida"),row("dup2","income",100000,"Vendas","Venda repetida")];
+const duplicateReport=calculateDre(duplicateSet,{"income\u0000Vendas":{dre_line:"revenue"}});
+assert.equal(duplicateReport.summary.duplicate_candidate_count,2);
+assert.equal(duplicateReport.details.filter(x=>x.duplicate_suspected).length,2);
+assert(duplicateReport.warnings.some(x=>x.includes("podem estar duplicados")));
+
 const genericTax = row("tax2","expense",100000,"Impostos","Pagamento de impostos");
 assert.equal(suggestDreClassification(genericTax).line,"unclassified");
 const directCostAmbiguous = row("cost2","expense",100000,"Custos variáveis","Compra de mercadorias");
@@ -72,4 +78,4 @@ assert.match(xls,/<Worksheet ss:Name="Notas">/);
 assert.match(xls,/>50575\.00</);
 assert.match(xls,/>5000\.00</);
 assert.match(xls,/>Venda de teste</);
-console.log("DRE regression checks passed: A reclassification, B opening balance, generic taxes/costs pending, competence priority, tenant separation, audited override storage.");
+console.log("DRE regression checks passed: A reclassification, B opening balance, duplicate detection, generic taxes/costs pending, competence priority, tenant separation, audited override storage.");
