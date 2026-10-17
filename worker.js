@@ -297,8 +297,8 @@ function cookieValue(request, name) {
 
 function checkOrigin(request) {
   const origin = request.headers.get("Origin");
-  if (!origin) return true;
-  try { return new URL(origin).host === new URL(request.url).host; } catch { return false; }
+  if (!origin || origin === "null") return false;
+  try { return new URL(origin).origin === new URL(request.url).origin; } catch { return false; }
 }
 
 async function createSession(db, user, tenant) {
