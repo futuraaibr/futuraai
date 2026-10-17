@@ -7,8 +7,8 @@ Aplicação B2B para gestão financeira e administração da plataforma. Interfa
 - Acesso por e-mail e senha com sessão `HttpOnly`, `Secure` e `SameSite=Strict`; senhas derivadas com PBKDF2-SHA-256.
 - Cadastros públicos aguardam validação do administrador antes de liberar o acesso.
 - Dashboard de receitas, despesas, saldo líquido, histórico mensal e categorias.
+- Previsão de caixa em cenários conservador, base e otimista, calculada a partir das receitas e despesas dos últimos 3 ou 6 meses completos; saldo inicial, horizonte e taxas podem ser ajustados e ficam salvos por empresa.
 - Importação CSV `data;descricao;tipo;valor;categoria`, com limite de 100 linhas e gravação atômica.
-- Cenários financeiros com crescimento composto e horizonte de 3, 6 ou 12 meses.
 - Área da empresa e consulta da equipe aprovada.
 - CSV de demonstração exclusivamente fictício.
 
@@ -49,3 +49,4 @@ A conta empresarial de teste contém cinco lançamentos fictícios. O CSV `demo.
 - As projeções aplicam crescimento mensal composto ao saldo líquido importado; não consideram impostos, sazonalidade, inflação ou compromissos futuros.
 - A importação CSV aceita até 100 linhas por arquivo.
 - Esta implantação não está homologada para operação comercial com dados reais. Antes disso, completar verificação de e-mail, recuperação de acesso, cobrança, revisão independente de segurança e validação ponta a ponta em navegador.
+- A previsão estima entradas e saídas recorrentes com base na média histórica e nas taxas informadas. Não incorpora automaticamente contas a receber/pagar futuras ainda não lançadas, sazonalidade ou saldo bancário; o saldo inicial deve ser informado pela empresa.
