@@ -62,7 +62,7 @@ assert.doesNotMatch(source, /Projeção baseada nos últimos 6 meses/);
 assert.match(source, /status\?\.source_reason==="no_recent_results"/, "news carousel must distinguish an empty search from a provider outage");
 assert.doesNotMatch(source, /A busca de manchetes está indisponível/);
 assert.match(source, /Backtest · 1 mês à frente/, "forecast UI must expose a historical forecast test");
-assert.match(source, /Amostra pequena; não conclua precisão/, "backtest UI must qualify small samples");
+assert.match(source, /não prova de precisão/, "backtest UI must avoid claiming accuracy from a short history");
 assert.match(source, /<th class="right">Resultado de caixa<\/th>/, "forecast output must identify cash result");
 assert.doesNotMatch(source, /<div class="label">Lucro líquido<\/div>/);
 assert.doesNotMatch(source, /<th class="right">Lucro<\/th>/);
@@ -95,7 +95,7 @@ const rampHistory=Array.from({length:12},(_,index)=>({
 }));
 const rampBacktest=qualityContext.backtest(rampHistory);
 assert.equal(rampBacktest.sample_count,6,"12 complete months should yield six one-month-ahead tests");
-assert.equal(rampBacktest.confidence,"amostra_util");
+assert.equal(rampBacktest.confidence,"12_meses_completos");
 assert.equal(rampBacktest.better_than_baseline,true,"the trend should beat the six-month average for steadily rising synthetic revenue");
 const sparseBacktest=qualityContext.backtest(rampHistory.map((item,index)=>index===3?{...item,movements:0}:item));
 assert.equal(sparseBacktest.sample_count,2,"backtest windows touching a missing month must be excluded while later complete windows remain testable");
