@@ -48,6 +48,19 @@ CREATE TABLE IF NOT EXISTS transactions (
   payment_method TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
+  dedupe_key TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS transaction_audit (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  actor_id TEXT NOT NULL,
+  actor_name TEXT NOT NULL,
+  actor_email TEXT NOT NULL,
+  action TEXT NOT NULL,
+  transaction_id TEXT NOT NULL DEFAULT '',
+  details TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
 
@@ -67,6 +80,8 @@ CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_sessions_token_expiry ON sessions(token_hash, expires_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_tenant_date ON transactions(tenant_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_tenant_category ON transactions(tenant_id, type, category);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_tenant_dedupe ON transactions(tenant_id, dedupe_key) WHERE dedupe_key != '';
+CREATE INDEX IF NOT EXISTS idx_transaction_audit_tenant_created ON transaction_audit(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scenarios_tenant_created ON scenarios(tenant_id, created_at DESC);
 
 -- Platform administration, account approval, and security audit.
