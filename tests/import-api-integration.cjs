@@ -363,7 +363,7 @@ async function main() {
   finally{global.fetch=beforeBacktestFetch;console.error=previousConsoleError;}
   assert.equal(completeBacktestForecast.response.status,200,JSON.stringify(completeBacktestForecast.data));
   assert.equal(completeBacktestForecast.data.backtest.sample_count,6);
-  assert.equal(completeBacktestForecast.data.backtest.confidence,"amostra_util");
+  assert.equal(completeBacktestForecast.data.backtest.confidence,"12_meses_completos");
   assert.equal(completeBacktestForecast.data.backtest.better_than_baseline,true,
     "a rising synthetic revenue series should produce lower one-step error than a flat six-month average");
 
