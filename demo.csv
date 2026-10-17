@@ -1,0 +1,6 @@
+data;descricao;tipo;valor;categoria
+2026-09-01;Mensalidade cliente Alfa;receita;480,50;Serviços
+2026-09-05;Projeto de implantação;receita;600,00;Consultoria
+2026-09-12;Suporte premium;receita;220,60;Serviços
+2026-09-03;Licenças de software;despesa;200,25;Tecnologia
+2026-09-10;Material de escritório;despesa;100,00;Operacional
