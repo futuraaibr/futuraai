@@ -40,6 +40,22 @@ Depois de qualquer recuperação, conferir tabelas e contagens esperadas por emp
 
 Time Travel serve à recuperação pontual dentro da retenção do plano. Antes de aceitar dados externos, ainda é necessário definir um backup fora da janela de retenção, com criptografia, acesso restrito, retenção, alerta de falha e teste periódico de restauração. Não enviar exportações de clientes para GitHub ou para o computador local sem um procedimento de proteção de dados aprovado.
 
+## Estratégia proposta de backup externo (ainda não ativada)
+
+A documentação atual da Cloudflare descreve um fluxo agendado de D1 para R2 usando Workflows: iniciar a exportação REST no formato `polling`, acompanhar até a API retornar uma URL assinada e gravar o dump SQL em R2. O exemplo oficial deixa explícito que o segredo usado pelo Workflow precisa ter permissão de exportação para a D1 escolhida. Referência: [Cloudflare — Export and save D1 database](https://developers.cloudflare.com/workflows/examples/backup-d1/).
+
+### Configuração recomendada para a homologação
+
+- Um bucket R2 dedicado, privado e sem domínio público; não reutilizar bucket de assets do portal.
+- Um Workflow separado do Worker da aplicação, agendado diariamente às 06:00 UTC (02:00 em Cuiabá), para exportar `futura-ai-portal-hml`.
+- Token API dedicado e restrito à exportação dessa base; armazenado como secret do Workflow. Não colocar token em `wrangler.jsonc`, GitHub, logs ou variáveis públicas.
+- Guardar cada dump com data e bookmark, mais um manifesto de execução com status, tamanho, versão do schema e checksum. Falha de exportação, download ou gravação deve marcar a execução como falha e gerar alerta operacional.
+- Retenção inicial a decidir antes da ativação: dumps diários por 35 dias e cópia mensal por 12 meses. A cópia mensal precisa ser criada explicitamente; a regra de ciclo de vida do R2 apenas expira objetos conforme a política definida. Referência: [Cloudflare — R2 object lifecycle rules](https://developers.cloudflare.com/r2/buckets/object-lifecycles/).
+- Testar mensalmente a restauração do dump em uma D1 descartável, validando schema, integridade, contagens sintéticas e uma consulta de auditoria. Não restaurar sobre a base ativa como rotina de teste.
+- Exportações contêm credenciais derivadas, dados financeiros e dados pessoais; restringir leitura do bucket e definir responsáveis, retenção, exclusão e registro de acesso antes de colocar dados reais.
+
+**Estado atual:** arquitetura pesquisada e documentada, mas não há Workflow, bucket ou token de exportação ativos. A ativação exige configurar o segredo dedicado e verificar a política de retenção e acesso; nenhuma exportação da D1 principal foi feita nesta etapa.
+
 ## Evidência local automatizada
 
 `npm run check` executa `tests/backup-restore-smoke.cjs`: cria uma base temporária a partir do schema real, grava registros fictícios, cria snapshot SQLite, remove os registros da origem e confirma que a cópia mantém empresa, usuário, movimento, auditoria e `PRAGMA integrity_check = ok`. Isso valida a rotina local de cópia e leitura; não substitui o exercício remoto de Time Travel.
