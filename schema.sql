@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   date TEXT NOT NULL,
+  competence_date TEXT,
   description TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
   amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
