@@ -1,0 +1,16 @@
+{
+  "name": "futura-ai-portal-hml",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute futura-ai-portal-hml --local --file schema.sql",
+    "db:remote": "wrangler d1 execute futura-ai-portal-hml --remote --file schema.sql",
+    "check": "node --check worker.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
