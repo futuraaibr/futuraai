@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const zlib = require("node:zlib");
 
 const source = fs.readFileSync(path.join(__dirname, "../worker.js"), "utf8");
 const start = source.indexOf("function validIsoDate(value)");
@@ -91,6 +92,57 @@ assert.equal(frontendContext.validators.resolveImportMovement("Receita",-100,"")
 assert.equal(frontendContext.validators.resolveImportMovement("Receita",100,"Despesa").error,"O tipo informado não corresponde ao valor de débito/crédito.");
 assert.deepEqual(JSON.parse(JSON.stringify(frontendContext.validators.resolveImportMovement("",100,"Despesa"))),{type:"Despesa",amount:100});
 
+function zipStored(files) {
+  const locals=[],centrals=[];let offset=0;
+  for(const [name,text] of Object.entries(files)){
+    const filename=Buffer.from(name),data=Buffer.from(text),local=Buffer.alloc(30),central=Buffer.alloc(46);
+    local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);local.writeUInt16LE(0,6);local.writeUInt16LE(0,8);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(filename.length,26);local.writeUInt16LE(0,28);
+    locals.push(local,filename,data);
+    central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);central.writeUInt16LE(20,6);central.writeUInt16LE(0,8);central.writeUInt16LE(0,10);central.writeUInt32LE(data.length,20);central.writeUInt32LE(data.length,24);central.writeUInt16LE(filename.length,28);central.writeUInt16LE(0,30);central.writeUInt16LE(0,32);central.writeUInt32LE(offset,42);
+    centrals.push(central,filename);offset+=local.length+filename.length+data.length;
+  }
+  const centralBytes=Buffer.concat(centrals),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(Object.keys(files).length,8);end.writeUInt16LE(Object.keys(files).length,10);end.writeUInt32LE(centralBytes.length,12);end.writeUInt32LE(offset,16);
+  return Buffer.concat([...locals,centralBytes,end]);
+}
+class XmlNode {
+  constructor(name,attrs={}){this.name=name;this.attrs=attrs;this.children=[];this.ownText="";}
+  getAttribute(name){return this.attrs[name]??null;}
+  getAttributeNS(_ns,name){return Object.entries(this.attrs).find(([key])=>key.split(":").pop()===name)?.[1]??null;}
+  get textContent(){return this.ownText+this.children.map(child=>child.textContent).join("");}
+  getElementsByTagNameNS(_ns,name){const out=[];for(const child of this.children){if(child.name.split(":").pop()===name)out.push(child);out.push(...child.getElementsByTagNameNS(_ns,name));}return out;}
+  getElementsByTagName(name){return this.getElementsByTagNameNS("*",name);}
+}
+class MinimalDOMParser {
+  parseFromString(xml){
+    const root=new XmlNode("document"),stack=[root],tokens=xml.match(/<\/?[^>]+>|[^<]+/g)||[];
+    for(const token of tokens){
+      if(token.startsWith("<?")||token.startsWith("<!"))continue;
+      if(token.startsWith("</")){if(stack.length>1)stack.pop();continue;}
+      if(token.startsWith("<")){
+        const selfClosing=/\/>$/.test(token),match=token.match(/^<([^\s/>]+)([\s\S]*?)\/?\s*>$/);if(!match)continue;
+        const attrs={};for(const attr of match[2].matchAll(/([^\s=]+)\s*=\s*(["'])(.*?)\2/g))attrs[attr[1]]=attr[3];
+        const node=new XmlNode(match[1],attrs);stack.at(-1).children.push(node);if(!selfClosing)stack.push(node);
+      }else stack.at(-1).ownText+=token.replaceAll("&amp;","&").replaceAll("&lt;","<").replaceAll("&gt;",">").replaceAll("&quot;",'"').replaceAll("&apos;","'");
+    }
+    return root;
+  }
+}
+async function testXlsxParser(){
+  const xml={
+    "xl/workbook.xml":'<workbook xmlns:r="urn:rel"><sheets><sheet name="Movimentações" r:id="rId1"/></sheets></workbook>',
+    "xl/_rels/workbook.xml.rels":'<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    "xl/worksheets/sheet1.xml":'<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>data</t></is></c><c r="B1" t="inlineStr"><is><t>descricao</t></is></c><c r="C1" t="inlineStr"><is><t>tipo</t></is></c><c r="D1" t="inlineStr"><is><t>valor</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>2026-10-12</t></is></c><c r="B2" t="inlineStr"><is><t>Venda sintética</t></is></c><c r="C2" t="inlineStr"><is><t>receita</t></is></c><c r="D2"><v>2500.75</v></c></row></sheetData></worksheet>'
+  };
+  const zip=zipStored(xml),bytes=new Uint8Array(zip),start=appScript.indexOf("function importColIndex"),end=appScript.indexOf("function parseImportNumber",start),context={Blob,Response,DecompressionStream,TextDecoder,DataView,Uint8Array,URL,DOMParser:MinimalDOMParser};
+  assert(start>=0&&end>start,"XLSX parser and helpers must exist in the application script");
+  vm.runInNewContext(appScript.slice(start,end)+"\nglobalThis.parseWorkbook=parseXlsxFile;",context);
+  const workbook=await context.parseWorkbook({arrayBuffer:async()=>bytes.slice().buffer});
+  assert.equal(workbook.sheets[0].name,"Movimentações");
+  assert.equal(workbook.sheets[0].rows[0][0],"data");
+  assert.equal(workbook.sheets[0].rows[1][1],"Venda sintética");
+  assert.equal(workbook.sheets[0].rows[1][3],"2500.75");
+}
+
 async function testDuplicateStaging() {
   const helperStart = source.indexOf("async function prepareTransactionImport");
   const helperEnd = source.indexOf("function adminCookie", helperStart);
@@ -126,8 +178,8 @@ async function testDuplicateStaging() {
   assert.equal(result.candidates.find(row => row.description === "Compra 1" && row.cost_center === "Financeiro")?.cost_center, "Financeiro");
 }
 
-testDuplicateStaging().then(() => {
-  console.log("Import/forecast regression checks passed: CSV/TSV, locale values, quoted fields, debit-credit validation, row limits, batched duplicate lookups, tenant cost centers, and sparse-history forecast safeguards.");
+Promise.all([testDuplicateStaging(),testXlsxParser()]).then(() => {
+  console.log("Import/forecast regression checks passed: CSV/TSV/XLSX parsing, locale values, quoted fields, debit-credit validation, row limits, batched duplicate lookups, tenant cost centers, and sparse-history forecast safeguards.");
 }).catch(error => {
   console.error(error);
   process.exitCode = 1;
