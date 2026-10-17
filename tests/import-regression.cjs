@@ -59,6 +59,8 @@ assert.match(source, /Margem de caixa projetada:/, "AI cash-flow forecasts must 
 assert.match(source, /Histórico incompleto: '\+coverageLabel/, "forecast UI must explain sparse historical coverage");
 assert.match(source, /Base observada: '\+coverageLabel/, "forecast UI must identify the months used for its projection");
 assert.doesNotMatch(source, /Projeção baseada nos últimos 6 meses/);
+assert.match(source, /status\?\.source_reason==="no_recent_results"/, "news carousel must distinguish an empty search from a provider outage");
+assert.doesNotMatch(source, /A busca de manchetes está indisponível/);
 assert.match(source, /<th class="right">Resultado de caixa<\/th>/, "forecast output must identify cash result");
 assert.doesNotMatch(source, /<div class="label">Lucro líquido<\/div>/);
 assert.doesNotMatch(source, /<th class="right">Lucro<\/th>/);
