@@ -345,9 +345,30 @@ async function main() {
   assert.equal(forecast.data.news_status.reason,"live_search_fallback");
   assert.equal(forecast.data.news_status.source_reason,"no_recent_results");
   assert.equal(forecast.data.news[0].is_search_link,true,"an empty feed must be labeled as a live search, never as a published article");
+  assert.equal(forecast.data.backtest.sample_count,0,"sparse company history must not produce a fabricated backtest sample");
+  assert.equal(forecast.data.backtest.confidence,"dados_insuficientes");
+
+  for(let offset=-12;offset<0;offset++){
+    const month=monthOffset(offset),income=10000+(offset+12)*1000;
+    sqlite.prepare("INSERT INTO transactions(id,tenant_id,date,description,type,amount_cents,category,created_at) VALUES(?,?,?,?,?,?,?,?)")
+      .run(`backtest-income-${offset}`,companyB.tenant_id,`${month}-05`,"Receita sintética de tendência","income",income,"Serviços financeiros",new Date().toISOString());
+    sqlite.prepare("INSERT INTO transactions(id,tenant_id,date,description,type,amount_cents,category,created_at) VALUES(?,?,?,?,?,?,?,?)")
+      .run(`backtest-expense-${offset}`,companyB.tenant_id,`${month}-10`,"Despesa sintética estável","expense",4000,"Operação financeira",new Date().toISOString());
+  }
+  const beforeBacktestFetch=global.fetch;
+  global.fetch=async()=>new Response("<rss><channel></channel></rss>",{status:200,headers:{"content-type":"application/rss+xml"}});
+  let completeBacktestForecast;
+  console.error=()=>{};
+  try{completeBacktestForecast=await call("/api/ai-forecast",{cookie:companyB.cookie});}
+  finally{global.fetch=beforeBacktestFetch;console.error=previousConsoleError;}
+  assert.equal(completeBacktestForecast.response.status,200,JSON.stringify(completeBacktestForecast.data));
+  assert.equal(completeBacktestForecast.data.backtest.sample_count,6);
+  assert.equal(completeBacktestForecast.data.backtest.confidence,"amostra_util");
+  assert.equal(completeBacktestForecast.data.backtest.better_than_baseline,true,
+    "a rising synthetic revenue series should produce lower one-step error than a flat six-month average");
 
   sqlite.close();
-  console.log("API integration checks passed: company/admin lifecycle, billing and project finance, exact synthetic totals, period/dashboard reconciliation, DRE/staff/payroll tenant isolation, personalized news, idempotent import, audit consistency, atomic rollback, zero payroll amounts, and sparse-history AI fallback.");
+  console.log("API integration checks passed: company/admin lifecycle, billing and project finance, exact synthetic totals, period/dashboard reconciliation, DRE/staff/payroll tenant isolation, personalized news, idempotent import, audit consistency, atomic rollback, zero payroll amounts, sparse-history backtest and AI fallback.");
 }
 
 main().catch(error => {
