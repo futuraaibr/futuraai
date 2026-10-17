@@ -22,6 +22,8 @@ Testar, em entrevistas e propostas de piloto, três âncoras mensais por empresa
 | Planejamento | R$ 199–299 | Cenários salvos, análise setorial útil, fontes e premissas rastreáveis, equipe |
 | Acompanhado | R$ 499–799 | Além do software, revisão humana periódica e plano de ação; não oferecer antes de existir capacidade operacional para entregar o serviço |
 
+Como referência pública, o Nibo anuncia planos mensais Light por R$ 208, Plus por R$ 312 e Premium por R$ 479; a Conta Azul apresenta o plano Controle Microempresas a partir de R$ 349,90/mês em promoção. São produtos mais amplos, com conciliação, emissão/cobrança ou integrações; portanto, servem apenas como âncora de mercado, não como comparação direta nem prova de que a FUTURA AI possa cobrar o mesmo. A limitação atual a CSV manual justifica testar abaixo desses valores até que a análise diferencial seja demonstrada. Fontes consultadas em 17/10/2026: [Nibo — planos e preços](https://www.nibo.com.br/empresa/planos-e-precos) e [Conta Azul — planos](https://contaazul.com/).
+
 Fazer entrevistas de disposição a pagar com pelo menos 15 empresas (5 por segmento testado), apresentar uma única oferta concreta por entrevista e registrar o preço aceito, objeções, urgência e alternativa atual. Não tratar elogio ou interesse em teste gratuito como validação de compra. Começar por um piloto acompanhado sem cobrança automática; só oferecer pagamento depois que o fluxo real e a proposta estiverem comprovados.
 
 ### Compatibilidade com a meta financeira
