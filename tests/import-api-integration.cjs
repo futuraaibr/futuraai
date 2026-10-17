@@ -48,8 +48,9 @@ async function main() {
     }
   };
   const env = { DB: db };
-  const call = async (pathname, { method = "GET", body, cookie } = {}) => {
-    const headers = { Origin: "https://futura.test" };
+  const call = async (pathname, { method = "GET", body, cookie, omitOrigin = false, origin = "https://futura.test" } = {}) => {
+    const headers = {};
+    if (!omitOrigin) headers.Origin = origin;
     if (body !== undefined) headers["content-type"] = "application/json";
     if (cookie) headers.Cookie = cookie;
     const response = await worker.fetch(new Request(`https://futura.test${pathname}`, {
@@ -69,12 +70,20 @@ async function main() {
     sqlite.prepare("UPDATE user_reviews SET status='approved' WHERE user_id=?").run(user.id);
     const login = await call("/api/auth/login", { method: "POST", body: { email, password: "Senha-Interna-2026!" } });
     assert.equal(login.response.status, 200);
+    assert.match(login.response.headers.get("set-cookie"), /HttpOnly; Secure; SameSite=Strict/,
+      "company session cookies must be protected from script access and cross-site use");
     const cookie = login.response.headers.get("set-cookie").split(";")[0];
     return { ...user, cookie };
   };
 
   const companyA = await registerAndLogin("Empresa Sintética A", "a@example.test");
   const companyB = await registerAndLogin("Empresa Sintética B", "b@example.test");
+  const missingOriginRegistration=await call("/api/auth/register",{method:"POST",omitOrigin:true,body:{name:"Bloqueado",company:"Bloqueada",email:"sem-origem@example.test",password:"Senha-Interna-2026!"}});
+  const foreignOriginRegistration=await call("/api/auth/register",{method:"POST",origin:"https://attacker.example",body:{name:"Bloqueado",company:"Bloqueada",email:"origem-estranha@example.test",password:"Senha-Interna-2026!"}});
+  assert.equal(missingOriginRegistration.response.status,403,"cookie-authenticated mutation routes must reject requests without Origin");
+  assert.equal(foreignOriginRegistration.response.status,403,"mutation routes must reject cross-origin requests");
+  assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM users WHERE email LIKE '%@example.test'").get().n),2,
+    "origin-rejected registrations must not create accounts");
   const adminToken = "a".repeat(64);
   const adminDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(adminToken));
   const adminTokenHash = [...new Uint8Array(adminDigest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
@@ -173,6 +182,8 @@ async function main() {
   const firstImport = await call("/api/transactions/import", { method: "POST", body: csv, cookie: companyA.cookie });
   assert.equal(firstImport.response.status, 200, JSON.stringify(firstImport.data));
   assert.deepEqual(firstImport.data, { imported: 3, skipped_duplicates: 0, inferred_categories: 0 });
+  const missingOriginMovement=await call("/api/transactions",{method:"POST",cookie:companyA.cookie,omitOrigin:true,body:{date:"2026-10-02",description:"Bloqueado sem origem",type:"income",amount:20,category:"Teste"}});
+  assert.equal(missingOriginMovement.response.status,403,"authenticated data mutations must require an exact same-origin Origin header");
   const totals = sqlite.prepare(`SELECT COUNT(*) AS count,
     SUM(CASE WHEN type='income' THEN amount_cents ELSE 0 END) AS income,
     SUM(CASE WHEN type='expense' THEN amount_cents ELSE 0 END) AS expense
