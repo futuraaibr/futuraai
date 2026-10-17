@@ -439,12 +439,12 @@ function parseCsv(text) {
   const normalize = (value) => value.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
   const header = rows.shift().map(normalize);
   const aliases = {
-    date: ["data", "date", "data_lancamento", "data_movimento", "data_transacao", "dt_lancamento", "competencia"],
-    description: ["descricao", "description", "historico", "memo", "lancamento", "nome"],
+    date: ["data", "date", "data_lancamento", "data_de_lancamento", "data_do_lancamento", "data_movimento", "data_de_movimento", "data_transacao", "dt_lancamento", "competencia"],
+    description: ["descricao", "description", "historico", "historico_do_lancamento", "memo", "lancamento", "nome"],
     type: ["tipo", "type", "natureza", "movimento", "tipo_lancamento"],
-    amount: ["valor", "amount", "valor_total", "valor_lancamento", "montante", "value"],
-    debit: ["debito", "debit", "valor_debito", "debit_amount", "saida_valor"],
-    credit: ["credito", "credit", "valor_credito", "credit_amount", "entrada_valor"],
+    amount: ["valor", "valor_r", "valor_rs", "amount", "amount_r", "valor_total", "valor_lancamento", "montante", "value"],
+    debit: ["debito", "debito_r", "debit", "debit_r", "valor_debito", "valor_debito_r", "debit_amount", "saida_valor"],
+    credit: ["credito", "credito_r", "credit", "credit_r", "valor_credito", "valor_credito_r", "credit_amount", "entrada_valor"],
     category: ["categoria", "category", "grupo", "classificacao", "classe"],
     account: ["conta", "conta_contabil", "account", "account_name", "plano_de_contas"],
     accountCode: ["codigo_contabil", "codigo_conta", "account_code", "conta_codigo", "cod_conta"],
