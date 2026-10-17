@@ -54,6 +54,9 @@ assert.doesNotMatch(source.slice(source.indexOf('if (path === "/api/transactions
 assert.match(source, /<div class="label">Resultado do período<\/div>/, "cash-flow movement results must not be labeled net profit");
 assert.match(source, /<div class="label">Margem de caixa<\/div>/, "cash-flow margin must be named accurately");
 assert.match(source, /Margem de caixa projetada:/, "AI cash-flow forecasts must not claim accounting net margin");
+assert.match(source, /Histórico incompleto: '\+coverageLabel/, "forecast UI must explain sparse historical coverage");
+assert.match(source, /Base observada: '\+coverageLabel/, "forecast UI must identify the months used for its projection");
+assert.doesNotMatch(source, /Projeção baseada nos últimos 6 meses/);
 assert.match(source, /<th class="right">Resultado de caixa<\/th>/, "forecast output must identify cash result");
 assert.doesNotMatch(source, /<div class="label">Lucro líquido<\/div>/);
 assert.doesNotMatch(source, /<th class="right">Lucro<\/th>/);
