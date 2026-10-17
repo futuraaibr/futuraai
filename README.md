@@ -10,7 +10,7 @@ Aplicação B2B para gestão financeira e administração da plataforma. Interfa
 - Na visão geral, análise setorial que cruza até seis meses de movimentações com notícias recentes, estima receitas, despesas, lucro e margem nos seis meses seguintes e recomenda ações; as notícias são citadas no próprio relatório.
 - Filtro de movimentações para 30, 60 ou 90 dias, histórico completo ou intervalo personalizado, com resumo de faturamento, despesas, lucro líquido e margem.
 - Previsão de caixa em cenários conservador, base e otimista, calculada a partir das receitas e despesas dos últimos 3 ou 6 meses completos com movimentação registrada; saldo inicial, horizonte e taxas podem ser ajustados e ficam salvos por empresa.
-- Importação CSV com cabeçalhos em português ou inglês, separador `;`, `,` ou tabulação, até 500 linhas e gravação atômica. Reconhece data, descrição/histórico, tipo e valor; categoria pode faltar. Guarda também conta contábil, código de conta, contraparte, centro de custo, documento, vencimento, pagamento, forma, status e observações quando presentes. Categorias inferidas ficam marcadas como sugestões para revisão.
+- Importação CSV com cabeçalhos em português ou inglês, separador `;`, `,` ou tabulação, até 500 linhas e gravação atômica. Reconhece data, descrição/histórico e valor único ou colunas separadas de débito/crédito; categoria pode faltar. Guarda também conta contábil, código de conta, contraparte, centro de custo, documento, vencimento, pagamento, forma, status e observações quando presentes. Categorias inferidas ficam marcadas como sugestões para revisão.
 - Área da empresa e consulta da equipe aprovada.
 - CSV de demonstração exclusivamente fictício.
 
