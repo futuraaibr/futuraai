@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS company_profiles (
   business_email TEXT NOT NULL DEFAULT '',
   segment TEXT NOT NULL DEFAULT '',
   subsegment TEXT NOT NULL DEFAULT '',
+  logo_data_url TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL,
   updated_by_admin_id TEXT REFERENCES platform_admins(id)
 );
