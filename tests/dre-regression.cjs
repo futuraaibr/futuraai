@@ -37,6 +37,8 @@ assert.equal(suggestDreClassification(testB[1]).line, "excluded");
 assert.equal(b.summary.income_cents, 10000000);
 assert.equal(b.summary.net_income_cents, 5000000);
 assert.equal(b.summary.excluded_count, 1);
+assert.equal(b.summary.net_margin_pct, null, "incomplete classifications must not present a definitive margin");
+assert.equal(b.summary.ebitda_cents, null, "EBITDA must remain unavailable without enough data");
 
 const duplicateSet=[row("dup1","income",100000,"Vendas","Venda repetida"),row("dup2","income",100000,"Vendas","Venda repetida")];
 const duplicateReport=calculateDre(duplicateSet,{"income\u0000Vendas":{dre_line:"revenue"}});
