@@ -285,6 +285,23 @@ async function main() {
   const financePayroll=await call("/api/payroll?year=2026",{cookie:companyB.cookie});
   assert.equal(financeStaff.response.status,403,"finance role cannot access employee salary roster");
   assert.equal(financePayroll.response.status,403,"finance role cannot access annual income reports");
+  const financeStaffImport=await call("/api/staff/import",{method:"POST",cookie:companyB.cookie,body:{people:[{full_name:"Importação não autorizada",monthly_salary:"1000,00"}]}});
+  const financePayrollWrite=await call("/api/payroll",{method:"POST",cookie:companyB.cookie,body:{staff_id:"missing",reference_month:"2026-10",taxable_income:"1000,00"}});
+  const financeBulkDelete=await call("/api/transactions",{method:"DELETE",cookie:companyB.cookie,body:{confirmation:"APAGAR TODOS"}});
+  assert.equal(financeStaffImport.response.status,403,"finance role cannot import employee salary data");
+  assert.equal(financePayrollWrite.response.status,403,"finance role cannot write payroll records");
+  assert.equal(financeBulkDelete.response.status,403,"finance role cannot erase all company transactions");
+  assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transactions WHERE tenant_id=?").get(companyB.tenant_id).n),3,
+    "a denied bulk erase must not change company transactions");
+  const anonymousSensitiveRoutes=[
+    ["/api/company/profile","GET"],["/api/transactions","GET"],["/api/transactions/audit","GET"],
+    ["/api/dre?from=2026-10-01&to=2026-10-31","GET"],["/api/staff","GET"],
+    ["/api/payroll?year=2026","GET"],["/api/ai-forecast","GET"]
+  ];
+  for(const [route,method] of anonymousSensitiveRoutes){
+    const denied=await call(route,{method});
+    assert.equal(denied.response.status,401,`${route} must reject requests without a company session`);
+  }
   sqlite.prepare("UPDATE users SET role='owner' WHERE id=?").run(companyB.id);
 
   const originalFeedFetch=global.fetch;
