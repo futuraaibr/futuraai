@@ -549,7 +549,7 @@ function sessionCookie(token, expires) {
 const clearCookie = "futura_session=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict";
 
 function parseMoney(value) {
-  let raw = String(value || "").trim().replace(/R\$\s?/g, "").replace(/\s/g, "");
+  let raw = String(value ?? "").trim().replace(/R\$\s?/g, "").replace(/\s/g, "");
   if (!raw) return null;
   const accountingNegative = raw.startsWith("(") && raw.endsWith(")");
   if (accountingNegative) raw = `-${raw.slice(1, -1)}`;
