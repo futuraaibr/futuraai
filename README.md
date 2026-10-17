@@ -10,7 +10,10 @@ Aplicação B2B para gestão financeira e administração da plataforma. Interfa
 - Na visão geral, análise setorial que cruza até seis meses de movimentações com notícias recentes, estima receitas, despesas, lucro e margem nos seis meses seguintes e recomenda ações; as notícias são citadas no próprio relatório.
 - Filtro de movimentações para 30, 60 ou 90 dias, histórico completo ou intervalo personalizado, com resumo de faturamento, despesas, lucro líquido e margem.
 - Previsão de caixa em cenários conservador, base e otimista, calculada a partir das receitas e despesas dos últimos 3 ou 6 meses completos com movimentação registrada; saldo inicial, horizonte e taxas podem ser ajustados e ficam salvos por empresa.
-- Importação CSV com cabeçalhos em português ou inglês, separador `;`, `,` ou tabulação, até 500 linhas e gravação atômica. Reconhece data, descrição/histórico e valor único ou colunas separadas de débito/crédito; categoria pode faltar. Guarda também conta contábil, código de conta, contraparte, centro de custo, documento, vencimento, pagamento, forma, status e observações quando presentes. Categorias inferidas ficam marcadas como sugestões para revisão.
+- Importação CSV com cabeçalhos em português ou inglês, separador `;`, `,` ou tabulação, até 500 linhas e gravação atômica. Reimportações repetidas ignoram lançamentos com a mesma data, tipo, valor e identificadores contábeis disponíveis; a interface informa quantos foram ignorados. Reconhece data, descrição/histórico e valor único ou colunas separadas de débito/crédito; categoria pode faltar. Guarda também conta contábil, código de conta, contraparte, centro de custo, documento, vencimento, pagamento, forma, status e observações quando presentes. Categorias inferidas ficam marcadas como sugestões para revisão.
+- Inclusão, edição e exclusão manual de lançamentos. O sistema avisa quando a movimentação parece repetida e permite confirmar casos legítimos.
+- Auditoria por empresa para importações, inclusões, edições, exclusões e limpeza do histórico, identificando usuário e horário.
+- Administradores da empresa podem apagar todos os lançamentos após confirmação digitada; a auditoria preserva a quantidade e os totais apagados. Essa ação não remove os registros de auditoria.
 - Área da empresa e consulta da equipe aprovada.
 - CSV de demonstração exclusivamente fictício.
 
@@ -47,7 +50,7 @@ Ao abrir o painel da empresa, a análise setorial é solicitada automaticamente 
 
 ## Banco e publicação
 
-O D1 de homologação está configurado no `wrangler.jsonc`. `schema.sql` cria as tabelas da aplicação, aprovação, sessões administrativas, auditoria, perfis empresariais e controle/cache de previsões. A binding `AI` conecta o portal ao Workers AI. Para publicar após instalar as dependências, aplique `npm run db:remote` e use `npm run deploy`.
+O D1 de homologação está configurado no `wrangler.jsonc`. `schema.sql` cria as tabelas da aplicação, aprovação, sessões administrativas, trilhas de auditoria, perfis empresariais e controle/cache de previsões. A migração `migrations/0003_transaction_audit_and_dedupe.sql` adiciona a chave de idempotência e a auditoria das movimentações. A binding `AI` conecta o portal ao Workers AI. Para publicar após instalar as dependências, aplique `npm run db:remote` e use `npm run deploy`.
 
 ## Dados de demonstração
 
@@ -55,7 +58,7 @@ A conta empresarial de teste contém cinco lançamentos fictícios. O CSV `demo.
 
 ## Limites conhecidos
 
-- A importação CSV aceita até 500 linhas por arquivo. Os mapeamentos de cabeçalho e as categorias sugeridas seguem regras heurísticas; revise classificações antes de usar em relatórios oficiais ou obrigações fiscais.
+- A importação CSV aceita até 500 linhas por arquivo. A deduplicação compara data, tipo, valor, descrição e identificadores contábeis; dois lançamentos verdadeiros sem identificadores diferentes podem parecer iguais. Nesses casos, confirme a duplicidade na inclusão manual e use documento, conta ou contraparte para diferenciá-los nos arquivos. Os mapeamentos de cabeçalho e as categorias sugeridas seguem regras heurísticas; revise classificações antes de usar em relatórios oficiais ou obrigações fiscais.
 - Esta implantação não está homologada para operação comercial com dados reais. Antes disso, completar verificação de e-mail, recuperação de acesso, cobrança, revisão independente de segurança e validação ponta a ponta em navegador.
 - A previsão da empresa estima entradas e saídas recorrentes com base na média histórica e nas taxas informadas. Não incorpora automaticamente contas a receber/pagar futuras ainda não lançadas, sazonalidade ou saldo bancário; o saldo inicial deve ser informado pela empresa.
 - A previsão financeira administrativa é uma estimativa linear de receita recorrente baseada na base ativa, ticket médio e novos clientes mensais informados; não é uma garantia de vendas ou recebimentos.
