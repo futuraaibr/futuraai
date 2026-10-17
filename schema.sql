@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS transactions (
   type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
   amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
   category TEXT NOT NULL,
+  category_source TEXT NOT NULL DEFAULT 'provided' CHECK (category_source IN ('provided', 'inferred')),
+  account_name TEXT NOT NULL DEFAULT '',
+  account_code TEXT NOT NULL DEFAULT '',
+  counterparty TEXT NOT NULL DEFAULT '',
+  cost_center TEXT NOT NULL DEFAULT '',
+  document_number TEXT NOT NULL DEFAULT '',
+  due_date TEXT,
+  payment_date TEXT,
+  payment_method TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 
