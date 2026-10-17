@@ -61,6 +61,8 @@ assert.match(source, /Base observada: '\+coverageLabel/, "forecast UI must ident
 assert.doesNotMatch(source, /Projeção baseada nos últimos 6 meses/);
 assert.match(source, /status\?\.source_reason==="no_recent_results"/, "news carousel must distinguish an empty search from a provider outage");
 assert.doesNotMatch(source, /A busca de manchetes está indisponível/);
+assert.match(source, /Backtest · 1 mês à frente/, "forecast UI must expose a historical forecast test");
+assert.match(source, /Amostra pequena; não conclua precisão/, "backtest UI must qualify small samples");
 assert.match(source, /<th class="right">Resultado de caixa<\/th>/, "forecast output must identify cash result");
 assert.doesNotMatch(source, /<div class="label">Lucro líquido<\/div>/);
 assert.doesNotMatch(source, /<th class="right">Lucro<\/th>/);
@@ -69,7 +71,7 @@ const qualityStart=source.indexOf("function summarizeAiForecastHistory(history)"
 const qualityEnd=source.indexOf("async function buildForecast",qualityStart);
 assert(qualityStart>=0&&qualityEnd>qualityStart,"forecast history quality helper must exist");
 const qualityContext={clamp:(value,min,max)=>Math.max(min,Math.min(max,value))};
-vm.runInNewContext(source.slice(qualityStart,qualityEnd)+"\nglobalThis.summarize=summarizeAiForecastHistory;",qualityContext);
+vm.runInNewContext(source.slice(qualityStart,qualityEnd)+"\nglobalThis.summarize=summarizeAiForecastHistory;globalThis.backtest=calculateForecastBacktest;",qualityContext);
 const sparseHistory=[
   {month:"2026-04",income_cents:10000,expense_cents:5000,movements:2},
   {month:"2026-05",income_cents:0,expense_cents:0,movements:0},
@@ -85,6 +87,20 @@ assert.equal(sparseQuality.revenue_trend_monthly_pct,0,"growth must not be infer
 assert.equal(sparseQuality.confidence,"dados_insuficientes");
 const completeHistory=sparseHistory.map((item,index)=>({...item,movements:index===0?2:3,income_cents:10000*(index+1),expense_cents:5000}));
 assert.equal(qualityContext.summarize(completeHistory).has_complete_history,true);
+const rampHistory=Array.from({length:12},(_,index)=>({
+  month:`2025-${String(index+1).padStart(2,"0")}`,
+  income_cents:10000+index*1000,
+  expense_cents:4000,
+  movements:1
+}));
+const rampBacktest=qualityContext.backtest(rampHistory);
+assert.equal(rampBacktest.sample_count,6,"12 complete months should yield six one-month-ahead tests");
+assert.equal(rampBacktest.confidence,"amostra_util");
+assert.equal(rampBacktest.better_than_baseline,true,"the trend should beat the six-month average for steadily rising synthetic revenue");
+const sparseBacktest=qualityContext.backtest(rampHistory.map((item,index)=>index===3?{...item,movements:0}:item));
+assert.equal(sparseBacktest.sample_count,2,"backtest windows touching a missing month must be excluded while later complete windows remain testable");
+assert.equal(sparseBacktest.confidence,"amostra_pequena");
+assert.equal(JSON.stringify(sparseBacktest.sample_months),JSON.stringify(["2025-11","2025-12"]));
 
 const appHtml = require("child_process").execFileSync("node", ["--input-type=module", "-e", "import worker from './worker.js'; const r=await worker.fetch(new Request('https://local.test/'),{}); process.stdout.write(await r.text())"], {encoding:"utf8"});
 const appScript = [...appHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(x=>x[1]).join("\n");
@@ -186,7 +202,7 @@ async function testDuplicateStaging() {
 }
 
 Promise.all([testDuplicateStaging(),testXlsxParser()]).then(() => {
-  console.log("Import/forecast regression checks passed: CSV/TSV/XLSX parsing, locale values, quoted fields, debit-credit validation, row limits, batched duplicate lookups, tenant cost centers, and sparse-history forecast safeguards.");
+  console.log("Import/forecast regression checks passed: CSV/TSV/XLSX parsing, locale values, quoted fields, debit-credit validation, duplicate lookups, cost centers, sparse-history safeguards, and rolling backtest accuracy metrics.");
 }).catch(error => {
   console.error(error);
   process.exitCode = 1;
