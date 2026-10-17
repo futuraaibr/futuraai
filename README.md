@@ -17,6 +17,10 @@ Aplicação B2B para gestão financeira e administração da plataforma. Interfa
 Acesse `/admin`. Não existe cadastro público de administradores. O painel permite:
 
 - Ver empresas, usuários, pendências e movimentações administrativas.
+- Acompanhar mensalidades, vencimentos e pagamentos por empresa; registrar recebimentos e preparar cobranças manuais.
+- Configurar lembretes automáticos de vencimento, condicionados à configuração de um remetente de e-mail transacional verificado.
+- Definir meta de receita recorrente, ticket médio e novos clientes mensais; comparar previsões conservadora, base e otimista.
+- Registrar e consultar receitas e despesas próprias do projeto FUTURA AI, com resumo mensal e trilha de auditoria.
 - Cadastrar empresa e responsável, com senha temporária mostrada uma única vez.
 - Aprovar ou rejeitar cadastros de usuários.
 - Ativar, desativar ou redefinir a senha de usuários.
@@ -27,7 +31,7 @@ A conta inicial de administração e as credenciais de teste são provisionadas 
 
 ## Homologação e segurança
 
-O sistema está em homologação. Não inserir dados reais de clientes, colaboradores ou transações. As credenciais da conta demonstrativa pertencem somente a esta instância. Os planos exibidos são referenciais; cobrança, verificação de e-mail e recuperação automática de senha ainda não estão habilitadas. O acesso administrativo tem sessão própria e limite de tentativas de autenticação.
+O sistema está em homologação. Não inserir dados reais de clientes, colaboradores ou transações. As credenciais da conta demonstrativa pertencem somente a esta instância. Os valores de mensalidade precisam ser configurados pelo administrador. O envio transacional ainda depende de domínio remetente verificado e binding de e-mail habilitada na Cloudflare; sem isso, a cobrança manual abre um rascunho no aplicativo de e-mail e os lembretes automáticos ficam desabilitados. O acesso administrativo tem sessão própria e limite de tentativas de autenticação.
 
 ## Rodar localmente
 
@@ -46,7 +50,7 @@ A conta empresarial de teste contém cinco lançamentos fictícios. O CSV `demo.
 
 ## Limites conhecidos
 
-- As projeções aplicam crescimento mensal composto ao saldo líquido importado; não consideram impostos, sazonalidade, inflação ou compromissos futuros.
 - A importação CSV aceita até 100 linhas por arquivo.
 - Esta implantação não está homologada para operação comercial com dados reais. Antes disso, completar verificação de e-mail, recuperação de acesso, cobrança, revisão independente de segurança e validação ponta a ponta em navegador.
-- A previsão estima entradas e saídas recorrentes com base na média histórica e nas taxas informadas. Não incorpora automaticamente contas a receber/pagar futuras ainda não lançadas, sazonalidade ou saldo bancário; o saldo inicial deve ser informado pela empresa.
+- A previsão da empresa estima entradas e saídas recorrentes com base na média histórica e nas taxas informadas. Não incorpora automaticamente contas a receber/pagar futuras ainda não lançadas, sazonalidade ou saldo bancário; o saldo inicial deve ser informado pela empresa.
+- A previsão financeira administrativa é uma estimativa linear de receita recorrente baseada na base ativa, ticket médio e novos clientes mensais informados; não é uma garantia de vendas ou recebimentos.
