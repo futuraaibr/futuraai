@@ -104,3 +104,15 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(token_hash, expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_reviews_status_created ON user_reviews(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit(created_at DESC);
+
+-- Company-specific assumptions used by the transaction-based cash forecast.
+CREATE TABLE IF NOT EXISTS forecast_preferences (
+  tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  opening_balance_cents INTEGER NOT NULL DEFAULT 0,
+  history_months INTEGER NOT NULL DEFAULT 3 CHECK (history_months IN (3, 6)),
+  horizon_months INTEGER NOT NULL DEFAULT 6 CHECK (horizon_months IN (3, 6, 12)),
+  revenue_growth REAL NOT NULL DEFAULT 0,
+  expense_growth REAL NOT NULL DEFAULT 0,
+  updated_by_user_id TEXT REFERENCES users(id),
+  updated_at TEXT NOT NULL
+);
