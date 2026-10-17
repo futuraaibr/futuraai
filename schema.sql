@@ -177,3 +177,35 @@ CREATE INDEX IF NOT EXISTS idx_billing_invoices_due ON billing_invoices(status,d
 CREATE INDEX IF NOT EXISTS idx_billing_invoice_tenant ON billing_invoices(tenant_id,due_date DESC);
 CREATE INDEX IF NOT EXISTS idx_project_financial_date ON project_financial_entries(entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_email_tenant ON billing_email_log(tenant_id,created_at DESC);
+
+-- Business profile maintained by platform administrators. Segment codes are validated in Worker.
+CREATE TABLE IF NOT EXISTS company_profiles (
+  tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  legal_name TEXT NOT NULL DEFAULT '',
+  cnpj TEXT NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT '',
+  postal_code TEXT NOT NULL DEFAULT '',
+  responsible_name TEXT NOT NULL DEFAULT '',
+  responsible_role TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  business_email TEXT NOT NULL DEFAULT '',
+  segment TEXT NOT NULL DEFAULT '',
+  subsegment TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL,
+  updated_by_admin_id TEXT REFERENCES platform_admins(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_company_profiles_cnpj ON company_profiles(cnpj) WHERE cnpj<>'';
+
+-- One cached AI outlook per tenant; daily account-wide inference limit stays within the free allocation.
+CREATE TABLE IF NOT EXISTS ai_forecast_cache (
+  tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  segment TEXT NOT NULL,
+  generated_at TEXT NOT NULL,
+  report_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ai_forecast_daily_usage (
+  usage_date TEXT PRIMARY KEY,
+  calls INTEGER NOT NULL DEFAULT 0 CHECK (calls >= 0 AND calls <= 1)
+);
