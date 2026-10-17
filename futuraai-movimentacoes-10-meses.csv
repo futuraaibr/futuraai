@@ -1,0 +1,41 @@
+data;descricao;tipo;valor;categoria
+2025-12-02;Vendas principais;receita;15000,00;Vendas
+2025-12-08;Serviços;receita;2000,00;Serviços
+2025-12-15;Compra de insumos;despesa;5000,00;Insumos
+2025-12-25;Folha de pagamento;despesa;7000,00;Pessoal
+2026-01-02;Vendas principais;receita;15600,00;Vendas
+2026-01-08;Serviços;receita;2050,00;Serviços
+2026-01-15;Compra de insumos;despesa;5200,00;Insumos
+2026-01-25;Folha de pagamento;despesa;7100,00;Pessoal
+2026-02-02;Vendas principais;receita;16200,00;Vendas
+2026-02-08;Serviços;receita;2100,00;Serviços
+2026-02-15;Compra de insumos;despesa;5400,00;Insumos
+2026-02-25;Folha de pagamento;despesa;7200,00;Pessoal
+2026-03-02;Vendas principais;receita;16800,00;Vendas
+2026-03-08;Serviços;receita;2150,00;Serviços
+2026-03-15;Compra de insumos;despesa;5600,00;Insumos
+2026-03-25;Folha de pagamento;despesa;7300,00;Pessoal
+2026-04-02;Vendas principais;receita;17400,00;Vendas
+2026-04-08;Serviços;receita;2200,00;Serviços
+2026-04-15;Compra de insumos;despesa;5800,00;Insumos
+2026-04-25;Folha de pagamento;despesa;7400,00;Pessoal
+2026-05-02;Vendas principais;receita;18000,00;Vendas
+2026-05-08;Serviços;receita;2250,00;Serviços
+2026-05-15;Compra de insumos;despesa;6000,00;Insumos
+2026-05-25;Folha de pagamento;despesa;7500,00;Pessoal
+2026-06-02;Vendas principais;receita;18600,00;Vendas
+2026-06-08;Serviços;receita;2300,00;Serviços
+2026-06-15;Compra de insumos;despesa;6200,00;Insumos
+2026-06-25;Folha de pagamento;despesa;7600,00;Pessoal
+2026-07-02;Vendas principais;receita;19200,00;Vendas
+2026-07-08;Serviços;receita;2350,00;Serviços
+2026-07-15;Compra de insumos;despesa;6400,00;Insumos
+2026-07-25;Folha de pagamento;despesa;7700,00;Pessoal
+2026-08-02;Vendas principais;receita;19800,00;Vendas
+2026-08-08;Serviços;receita;2400,00;Serviços
+2026-08-15;Compra de insumos;despesa;6600,00;Insumos
+2026-08-25;Folha de pagamento;despesa;7800,00;Pessoal
+2026-09-02;Vendas principais;receita;20400,00;Vendas
+2026-09-08;Serviços;receita;2450,00;Serviços
+2026-09-15;Compra de insumos;despesa;6800,00;Insumos
+2026-09-25;Folha de pagamento;despesa;7900,00;Pessoal
