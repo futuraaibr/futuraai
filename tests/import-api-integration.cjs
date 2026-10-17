@@ -117,6 +117,22 @@ async function main() {
   assert.equal(viewB.data.summary.count,3);
   assert.equal(viewA.data.summary.income_cents,130110);
   assert.equal(viewB.data.summary.expense_cents,30025);
+  const customPeriod=await call("/api/transactions?period=custom&from=2026-10-01&to=2026-10-01",{cookie:companyA.cookie});
+  assert.equal(customPeriod.data.summary.count,1);
+  assert.equal(customPeriod.data.transactions.length,1);
+  assert.equal(customPeriod.data.summary.income_cents,customPeriod.data.transactions.reduce((sum,row)=>sum+(row.type==="income"?row.amount_cents:0),0),"period summary must reconcile to its listed movements");
+  for(const period of ["30","60","90"]){
+    const filtered=await call(`/api/transactions?period=${period}`,{cookie:companyA.cookie});
+    const listedIncome=filtered.data.transactions.filter(row=>row.type==="income").reduce((sum,row)=>sum+row.amount_cents,0);
+    const listedExpense=filtered.data.transactions.filter(row=>row.type==="expense").reduce((sum,row)=>sum+row.amount_cents,0);
+    assert.equal(filtered.data.summary.income_cents,listedIncome,`${period}-day income summary must reconcile with listed rows`);
+    assert.equal(filtered.data.summary.expense_cents,listedExpense,`${period}-day expense summary must reconcile with listed rows`);
+  }
+  const dashboardA=await call("/api/dashboard?year=2026",{cookie:companyA.cookie});
+  assert.equal(dashboardA.data.income_cents,130110);
+  assert.equal(dashboardA.data.expense_cents,30025);
+  assert.equal(dashboardA.data.net_cents,100085);
+  assert.equal(dashboardA.data.count,3);
 
   sqlite.exec("CREATE TRIGGER fail_transaction_audit BEFORE INSERT ON transaction_audit BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;");
   const originalConsoleError=console.error;
@@ -139,6 +155,10 @@ async function main() {
   assert.equal(crossUpdate.response.status,404,"another tenant cannot edit this transaction");
   const crossDelete=await call("/api/transactions/"+encodeURIComponent(created.data.id),{method:"DELETE",cookie:companyB.cookie});
   assert.equal(crossDelete.response.status,404,"another tenant cannot delete this transaction");
+  const dreA=await call("/api/dre?from=2026-10-01&to=2026-10-31",{cookie:companyA.cookie});
+  const dreB=await call("/api/dre?from=2026-10-01&to=2026-10-31",{cookie:companyB.cookie});
+  assert(dreA.data.details.some(row=>row.id===created.data.id),"company A DRE should include its own manual movement");
+  assert(!dreB.data.details.some(row=>row.id===created.data.id),"company B DRE must not expose company A movements");
   const ownUpdate=await call("/api/transactions/"+encodeURIComponent(created.data.id),{method:"PUT",cookie:companyA.cookie,body:{date:"2026-10-07",description:"Registro privado revisado",type:"expense",amount:40,category:"Operação",cost_center:"Privado"}});
   assert.equal(ownUpdate.response.status,200);
   const editAudit=sqlite.prepare("SELECT details FROM transaction_audit WHERE tenant_id=? AND action='editado' ORDER BY created_at DESC LIMIT 1").get(companyA.tenant_id);
@@ -151,6 +171,51 @@ async function main() {
 
   sqlite.prepare("INSERT INTO company_profiles(tenant_id,legal_name,segment,subsegment,updated_at) VALUES(?,?,?,?,?)")
     .run(companyA.tenant_id,"Empresa Sintética A","Tecnologia da informação","Software sob encomenda",new Date().toISOString());
+  sqlite.prepare("INSERT INTO company_profiles(tenant_id,legal_name,segment,subsegment,updated_at) VALUES(?,?,?,?,?)")
+    .run(companyB.tenant_id,"Empresa Sintética B","Financeiro","Fintech de crédito",new Date().toISOString());
+  const profileA=await call("/api/company/profile",{cookie:companyA.cookie});
+  const profileB=await call("/api/company/profile",{cookie:companyB.cookie});
+  assert.equal(profileA.data.profile.segment,"Tecnologia da informação");
+  assert.equal(profileB.data.profile.segment,"Financeiro");
+  const staffCreated=await call("/api/staff",{method:"POST",cookie:companyA.cookie,body:{full_name:"Pessoa Sintética A",kind:"employee",position:"Analista",reference_code:"SYN-A-01",monthly_salary:"3500,00"}});
+  assert.equal(staffCreated.response.status,200);
+  const staffA=await call("/api/staff",{cookie:companyA.cookie});
+  const staffB=await call("/api/staff",{cookie:companyB.cookie});
+  assert.equal(staffA.data.staff.length,1);
+  assert.equal(staffB.data.staff.length,0,"another company cannot view employee or salary records");
+  const foreignPayroll=await call("/api/payroll",{method:"POST",cookie:companyB.cookie,body:{staff_id:staffCreated.data.id,reference_month:"2026-09",taxable_income:"3500,00"}});
+  assert.equal(foreignPayroll.response.status,400,"another company cannot create payroll for this employee");
+  const payrollSaved=await call("/api/payroll",{method:"POST",cookie:companyA.cookie,body:{staff_id:staffCreated.data.id,reference_month:"2026-09",taxable_income:"3500,00",social_security:"385,00",irrf:"75,00"}});
+  assert.equal(payrollSaved.response.status,200,JSON.stringify(payrollSaved.data));
+  const payrollA=await call("/api/payroll?year=2026",{cookie:companyA.cookie});
+  const payrollB=await call("/api/payroll?year=2026",{cookie:companyB.cookie});
+  assert.equal(payrollA.data.staff[0].months[0].taxable_income_cents,350000);
+  assert.equal(payrollB.data.staff.length,0);
+  sqlite.prepare("UPDATE users SET role='finance' WHERE id=?").run(companyB.id);
+  const financeStaff=await call("/api/staff",{cookie:companyB.cookie});
+  const financePayroll=await call("/api/payroll?year=2026",{cookie:companyB.cookie});
+  assert.equal(financeStaff.response.status,403,"finance role cannot access employee salary roster");
+  assert.equal(financePayroll.response.status,403,"finance role cannot access annual income reports");
+  sqlite.prepare("UPDATE users SET role='owner' WHERE id=?").run(companyB.id);
+
+  const originalFeedFetch=global.fetch;
+  global.fetch=async input=>{
+    const query=new URL(String(input)).searchParams.get("q")||"";
+    const title=query.toLocaleLowerCase("pt-BR").includes("software sob encomenda")?"Mercado de software sob encomenda cresce no Brasil":query.toLocaleLowerCase("pt-BR").includes("fintech de crédito")?"Fintech de crédito amplia serviços financeiros para empresas":"";
+    const rss=title?`<rss><channel><item><title>${title}</title><link>https://news.google.com/rss/articles/${encodeURIComponent(title)}</link><pubDate>Sat, 17 Oct 2026 09:00:00 GMT</pubDate><source>Portal Sintético</source></item></channel></rss>`:"<rss><channel></channel></rss>";
+    return new Response(rss,{status:200,headers:{"content-type":"application/rss+xml"}});
+  };
+  let newsA,newsB;
+  try{
+    newsA=await call("/api/sector-news",{cookie:companyA.cookie});
+    newsB=await call("/api/sector-news",{cookie:companyB.cookie});
+  }finally{global.fetch=originalFeedFetch;}
+  assert.equal(newsA.data.status.level,"segment");
+  assert.equal(newsB.data.status.level,"segment");
+  assert.match(newsA.data.items[0].title,/software sob encomenda/i);
+  assert.match(newsB.data.items[0].title,/fintech de crédito/i);
+  assert.notEqual(newsA.data.items[0].title,newsB.data.items[0].title,"sector news must be independently selected per tenant");
+
   const monthOffset = offset => {
     const date = new Date();
     date.setUTCDate(1);
@@ -184,7 +249,7 @@ async function main() {
   assert.equal(forecast.data.news[0].is_search_link,true,"an empty feed must be labeled as a live search, never as a published article");
 
   sqlite.close();
-  console.log("Import API integration checks passed: login, exact synthetic totals, persistence, idempotent reimport, validation, read/write tenant isolation, audit consistency, atomic rollback, and sparse-history AI fallback.");
+  console.log("API integration checks passed: exact synthetic totals, period/dashboard reconciliation, DRE/staff/payroll tenant isolation, personalized news, idempotent import, audit consistency, atomic rollback, zero payroll amounts, and sparse-history AI fallback.");
 }
 
 main().catch(error => {
