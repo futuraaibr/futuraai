@@ -264,6 +264,8 @@ async function main() {
       body: "data;descricao;tipo;valor\n2026-10-06;Lançamento sintético;despesa;10,00" });
   } finally { console.error=originalConsoleError; }
   assert.equal(failedBatch.response.status, 500);
+  assert.deepEqual(failedBatch.data, { error: "A importação não foi concluída. Nenhum dado do arquivo atual deve ser considerado confirmado." },
+    "import failures must return a safe, actionable message without internal database details");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transactions WHERE tenant_id=?").get(companyA.tenant_id).n), 3,
     "failed atomic import must leave no partial transactions");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transaction_audit WHERE tenant_id=? AND action='importado'").get(companyA.tenant_id).n), 2,
@@ -289,6 +291,10 @@ async function main() {
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transaction_audit WHERE tenant_id=? AND action='excluído'").get(companyA.tenant_id).n),1,"manual deletion must be audited");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transactions WHERE tenant_id=?").get(companyA.tenant_id).n),3);
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transactions WHERE tenant_id=?").get(companyB.tenant_id).n),3);
+  const auditA=await call("/api/transactions/audit",{cookie:companyA.cookie});
+  const auditB=await call("/api/transactions/audit",{cookie:companyB.cookie});
+  assert(auditA.data.audit.some(row=>row.transaction_id===created.data.id),"company A audit should retain its own movement history");
+  assert(!auditB.data.audit.some(row=>row.transaction_id===created.data.id),"company B audit must not expose company A movement IDs or details");
 
   sqlite.prepare("INSERT INTO company_profiles(tenant_id,legal_name,segment,subsegment,updated_at) VALUES(?,?,?,?,?)")
     .run(companyA.tenant_id,"Empresa Sintética A","Tecnologia da informação","Software sob encomenda",new Date().toISOString());
@@ -298,6 +304,20 @@ async function main() {
   const profileB=await call("/api/company/profile",{cookie:companyB.cookie});
   assert.equal(profileA.data.profile.segment,"Tecnologia da informação");
   assert.equal(profileB.data.profile.segment,"Financeiro");
+  const savedPreferencesA=await call("/api/forecast",{method:"POST",cookie:companyA.cookie,body:{opening_balance:9876.54,history_months:6,horizon_months:12,revenue_growth:4,expense_growth:2}});
+  const preferencesA=await call("/api/forecast",{cookie:companyA.cookie});
+  const preferencesB=await call("/api/forecast",{cookie:companyB.cookie});
+  assert.equal(savedPreferencesA.response.status,200);
+  assert.equal(preferencesA.data.preferences.opening_balance_cents,987654);
+  assert.equal(preferencesA.data.preferences.horizon_months,12);
+  assert.equal(preferencesB.data.preferences.opening_balance_cents,0,"forecast settings must not leak between companies");
+  assert.equal(preferencesB.data.preferences.horizon_months,6);
+  const scenarioCreated=await call("/api/scenarios",{method:"POST",cookie:companyA.cookie,body:{name:"Plano privado A",monthly_growth:5,months:6}});
+  assert.equal(scenarioCreated.response.status,201);
+  const scenariosA=await call("/api/scenarios",{cookie:companyA.cookie});
+  const scenariosB=await call("/api/scenarios",{cookie:companyB.cookie});
+  assert(scenariosA.data.scenarios.some(row=>row.id===scenarioCreated.data.id),"company A should see its own scenario");
+  assert.equal(scenariosB.data.scenarios.length,0,"company B must not see company A scenarios");
   const staffCreated=await call("/api/staff",{method:"POST",cookie:companyA.cookie,body:{full_name:"Pessoa Sintética A",kind:"employee",position:"Analista",reference_code:"SYN-A-01",monthly_salary:"3500,00"}});
   assert.equal(staffCreated.response.status,200);
   const staffA=await call("/api/staff",{cookie:companyA.cookie});
@@ -412,6 +432,7 @@ async function main() {
   try { forecast=await call("/api/ai-forecast",{cookie:companyA.cookie}); }
   finally { global.fetch=previousFetch;console.error=previousConsoleError; }
   assert.equal(forecast.response.status,200,JSON.stringify(forecast.data));
+  assert.equal(forecast.data.sector,"Tecnologia da informação","company A forecast must use its own sector profile");
   assert.equal(forecast.data.data_quality.months_with_data,2);
   assert.equal(forecast.data.data_quality.average_income_cents,15000);
   assert.equal(forecast.data.data_quality.revenue_trend_monthly_pct,0);
@@ -440,10 +461,19 @@ async function main() {
   try{completeBacktestForecast=await call("/api/ai-forecast",{cookie:companyB.cookie});}
   finally{global.fetch=beforeBacktestFetch;console.error=previousConsoleError;}
   assert.equal(completeBacktestForecast.response.status,200,JSON.stringify(completeBacktestForecast.data));
+  assert.equal(completeBacktestForecast.data.sector,"Financeiro","company B forecast must use its own sector profile");
   assert.equal(completeBacktestForecast.data.backtest.sample_count,6);
   assert.equal(completeBacktestForecast.data.backtest.confidence,"12_meses_completos");
   assert.equal(completeBacktestForecast.data.backtest.better_than_baseline,true,
     "a rising synthetic revenue series should produce lower one-step error than a flat six-month average");
+  const cachedForecastA=await call("/api/ai-forecast",{cookie:companyA.cookie});
+  const cachedForecastB=await call("/api/ai-forecast",{cookie:companyB.cookie});
+  assert.equal(cachedForecastA.data.cached,true);
+  assert.equal(cachedForecastB.data.cached,true);
+  assert.equal(cachedForecastA.data.sector,"Tecnologia da informação");
+  assert.equal(cachedForecastB.data.sector,"Financeiro");
+  assert.notEqual(cachedForecastA.data.data_quality.months_with_data,cachedForecastB.data.data_quality.months_with_data,
+    "the AI cache key must retain each company's independent financial history");
 
   sqlite.close();
   console.log("API integration checks passed: company/admin lifecycle, billing and project finance, exact synthetic totals, period/dashboard reconciliation, DRE/staff/payroll tenant isolation, personalized news, idempotent import, audit consistency, atomic rollback, zero payroll amounts, sparse-history backtest and AI fallback.");
