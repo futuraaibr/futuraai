@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS company_profiles (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_company_profiles_cnpj ON company_profiles(cnpj) WHERE cnpj<>'';
 
--- One cached AI outlook per tenant; daily account-wide inference limit stays within the free allocation.
+-- One cached AI outlook per tenant; bounded daily inference budget protects account usage.
 CREATE TABLE IF NOT EXISTS ai_forecast_cache (
   tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
   segment TEXT NOT NULL,
@@ -208,5 +208,5 @@ CREATE TABLE IF NOT EXISTS ai_forecast_cache (
 );
 CREATE TABLE IF NOT EXISTS ai_forecast_daily_usage (
   usage_date TEXT PRIMARY KEY,
-  calls INTEGER NOT NULL DEFAULT 0 CHECK (calls >= 0 AND calls <= 1)
+  calls INTEGER NOT NULL DEFAULT 0 CHECK (calls >= 0 AND calls <= 50)
 );
