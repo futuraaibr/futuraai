@@ -443,6 +443,8 @@ function parseCsv(text) {
     description: ["descricao", "description", "historico", "memo", "lancamento", "nome"],
     type: ["tipo", "type", "natureza", "movimento", "tipo_lancamento"],
     amount: ["valor", "amount", "valor_total", "valor_lancamento", "montante", "value"],
+    debit: ["debito", "debit", "valor_debito", "debit_amount", "saida_valor"],
+    credit: ["credito", "credit", "valor_credito", "credit_amount", "entrada_valor"],
     category: ["categoria", "category", "grupo", "classificacao", "classe"],
     account: ["conta", "conta_contabil", "account", "account_name", "plano_de_contas"],
     accountCode: ["codigo_contabil", "codigo_conta", "account_code", "conta_codigo", "cod_conta"],
@@ -456,7 +458,7 @@ function parseCsv(text) {
     notes: ["observacoes", "observacao", "notes", "complemento"]
   };
   const column = Object.fromEntries(Object.entries(aliases).map(([key, values]) => [key, header.findIndex((h) => values.includes(h))]));
-  if (column.date < 0 || column.description < 0 || column.amount < 0) throw new Error("Não reconheci as colunas obrigatórias. Inclua data, descrição/histórico e valor.");
+  if (column.date < 0 || column.description < 0 || (column.amount < 0 && (column.debit < 0 || column.credit < 0))) throw new Error("Não reconheci as colunas obrigatórias. Inclua data, descrição/histórico e valor ou débito/crédito.");
   if (rows.length > MAX_CSV_ROWS) throw new Error(`O limite é ${MAX_CSV_ROWS} lançamentos por importação.`);
   return rows.map((cells, i) => {
     if (cells.length !== header.length) throw new Error(`Linha ${i + 2}: quantidade de colunas diferente do cabeçalho.`);
@@ -466,9 +468,17 @@ function parseCsv(text) {
       const match = dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       return match ? `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}` : "";
     })();
-    const rawAmount = parseMoney(amountRaw);
+    let rawAmount = parseMoney(amountRaw), sideType = null;
+    if (column.amount < 0) {
+      const debitAmount = parseMoney(get("debit")), creditAmount = parseMoney(get("credit"));
+      if (debitAmount === null && creditAmount === null) rawAmount = null;
+      else if (debitAmount !== null && debitAmount > 0 && creditAmount !== null && creditAmount > 0) throw new Error(`Linha ${i + 2}: informe débito ou crédito, não ambos na mesma linha.`);
+      else if (creditAmount !== null && creditAmount > 0) { rawAmount = Math.abs(creditAmount); sideType = "income"; }
+      else if (debitAmount !== null && debitAmount > 0) { rawAmount = -Math.abs(debitAmount); sideType = "expense"; }
+      else rawAmount = null;
+    }
     const typeValue = typeRaw.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const type = /receita|entrada|credito|recebimento|income/.test(typeValue) ? "income" : /despesa|saida|debito|pagamento|expense/.test(typeValue) ? "expense" : (rawAmount === null ? null : rawAmount < 0 ? "expense" : "income");
+    const type = /receita|entrada|credito|recebimento|income/.test(typeValue) ? "income" : /despesa|saida|debito|pagamento|expense/.test(typeValue) ? "expense" : sideType || (rawAmount === null ? null : rawAmount < 0 ? "expense" : "income");
     const amount = rawAmount === null ? null : Math.abs(rawAmount);
     const parsedDate = date ? new Date(`${date}T00:00:00Z`) : null;
     if (!date || !parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) throw new Error(`Linha ${i + 2}: data inválida.`);
