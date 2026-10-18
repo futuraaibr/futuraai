@@ -55,10 +55,10 @@ const fullyClassifiedDuplicateRows=[
   row("income-tax","expense",50000,"IRPJ e CSLL","Tributos sobre o lucro")
 ];
 const fullyClassifiedDuplicateOverrides={
-  "income\\u0000Receita principal":{dre_line:"revenue"},
-  "expense\\u0000Tributos sobre vendas":{dre_line:"deductions"},
-  "expense\\u0000CMV":{dre_line:"direct_costs"},
-  "expense\\u0000IRPJ e CSLL":{dre_line:"income_taxes"}
+  "income\u0000Receita principal":{dre_line:"revenue"},
+  "expense\u0000Tributos sobre vendas":{dre_line:"deductions"},
+  "expense\u0000CMV":{dre_line:"direct_costs"},
+  "expense\u0000IRPJ e CSLL":{dre_line:"income_taxes"}
 };
 const duplicateMustStayPreliminary=calculateDre(fullyClassifiedDuplicateRows,fullyClassifiedDuplicateOverrides);
 assert.equal(duplicateMustStayPreliminary.summary.validation_status,"preliminary","possible duplicate movements must prevent the DRE from being marked as managerially validated");
