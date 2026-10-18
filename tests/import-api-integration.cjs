@@ -141,7 +141,7 @@ async function main() {
   });
   assert.equal(reusedLink.response.status, 410, "activation links must be single-use");
 
-  const previousFetch=global.fetch;
+  const relayPreviousFetch=global.fetch;
   let relayMessage=null;
   global.fetch=async (target,options)=>{relayMessage={target,body:JSON.parse(options.body)};return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json"}})};
   env.EMAIL=undefined;env.TRIAL_FROM_EMAIL=undefined;env.TRIAL_EMAIL_VERIFIED=undefined;
@@ -155,7 +155,7 @@ async function main() {
   assert.equal(relayMessage.body.senderName,"FUTURA AI");
   assert.match(relayMessage.body.text,/ativar=/);
   assert.equal(relayMessage.body.token,"r".repeat(48));
-  global.fetch=previousFetch;
+  global.fetch=relayPreviousFetch;
   delete env.GMAIL_RELAY_URL;delete env.GMAIL_RELAY_TOKEN;
   const adminToken = "a".repeat(64);
   const adminDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(adminToken));
