@@ -44,7 +44,28 @@ const duplicateSet=[row("dup1","income",100000,"Vendas","Venda repetida"),row("d
 const duplicateReport=calculateDre(duplicateSet,{"income\u0000Vendas":{dre_line:"revenue"}});
 assert.equal(duplicateReport.summary.duplicate_candidate_count,2);
 assert.equal(duplicateReport.details.filter(x=>x.duplicate_suspected).length,2);
+
 assert(duplicateReport.warnings.some(x=>x.includes("podem estar duplicados")));
+
+const fullyClassifiedDuplicateRows=[
+  row("rev1","income",1000000,"Receita principal","Venda recorrente"),
+  row("rev2","income",1000000,"Receita principal","Venda recorrente"),
+  row("deductions","expense",100000,"Tributos sobre vendas","Impostos sobre venda"),
+  row("direct-costs","expense",200000,"CMV","Custo de mercadoria"),
+  row("income-tax","expense",50000,"IRPJ e CSLL","Tributos sobre o lucro")
+];
+const fullyClassifiedDuplicateOverrides={
+  "income\\u0000Receita principal":{dre_line:"revenue"},
+  "expense\\u0000Tributos sobre vendas":{dre_line:"deductions"},
+  "expense\\u0000CMV":{dre_line:"direct_costs"},
+  "expense\\u0000IRPJ e CSLL":{dre_line:"income_taxes"}
+};
+const duplicateMustStayPreliminary=calculateDre(fullyClassifiedDuplicateRows,fullyClassifiedDuplicateOverrides);
+assert.equal(duplicateMustStayPreliminary.summary.validation_status,"preliminary","possible duplicate movements must prevent the DRE from being marked as managerially validated");
+assert.equal(duplicateMustStayPreliminary.summary.net_income_partial,true,"possible duplicates must keep the net result partial");
+assert.equal(duplicateMustStayPreliminary.summary.net_margin_pct,null,"possible duplicates must suppress the net margin");
+assert.match(duplicateMustStayPreliminary.summary.net_income_label,/parcial/i);
+
 
 const genericTax = row("tax2","expense",100000,"Impostos","Pagamento de impostos");
 assert.equal(suggestDreClassification(genericTax).line,"unclassified");
