@@ -8,7 +8,7 @@
 - O cache das notícias foi versionado para invalidar respostas antigas. Se não houver manchetes recentes, o portal preserva somente conteúdo recente ou oferece busca econômica ao vivo, sem apresentar notícia antiga como atual.
 - A DRE agora identifica o subtotal como parcial quando há lançamentos pendentes, categorias não validadas, competência ausente, candidatos a duplicidade ou dados essenciais não classificados. O card mostra a quantidade e o valor pendente fora do subtotal; a margem fica indisponível quando a base não permite cálculo confiável.
 - Cadastro manual de equipe bloqueia novo código de referência duplicado. Duplicidades preexistentes são sinalizadas para revisão, sem apagar, mesclar ou alterar dados históricos.
-- Testes de integração foram adicionados para notícia de agosto em outubro, invalidação do cache, subtotal parcial da DRE e prevenção de código repetido. A atualização de código e testes está no pull request de homologação; o CI #71 passou na revisão final.
+- Testes de integração foram adicionados para notícia de agosto em outubro, invalidação do cache, subtotal parcial da DRE e prevenção de código repetido. A atualização de código e testes está no pull request de homologação; o CI #77 passou na revisão final. Margem líquida, margem bruta e EBITDA ficam sem valor quando faltam classificações confirmadas ou dados essenciais.
 - O ambiente de homologação continua sem publicação desta alteração. Testes visuais desktop/celular, navegação real das manchetes e aceite integral ponta a ponta continuam pendentes.
 
 ## Registro de execução — 17/10/2026
