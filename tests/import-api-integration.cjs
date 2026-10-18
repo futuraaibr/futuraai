@@ -349,13 +349,21 @@ async function main() {
   assert.equal(financeStaff.response.status,403,"finance role cannot access employee salary roster");
   assert.equal(financePayroll.response.status,403,"finance role cannot access annual income reports");
   const financeStaffImport=await call("/api/staff/import",{method:"POST",cookie:companyB.cookie,body:{people:[{full_name:"Importação não autorizada",monthly_salary:"1000,00"}]}});
+  const financeStaffWrite=await call("/api/staff",{method:"POST",cookie:companyB.cookie,body:{full_name:"Alteração não autorizada",monthly_salary:"1000,00"}});
   const financePayrollWrite=await call("/api/payroll",{method:"POST",cookie:companyB.cookie,body:{staff_id:"missing",reference_month:"2026-10",taxable_income:"1000,00"}});
+  const financeRegulatoryRefresh=await call("/api/regulatory-updates/refresh",{method:"POST",cookie:companyB.cookie,body:{}});
   const financeBulkDelete=await call("/api/transactions",{method:"DELETE",cookie:companyB.cookie,body:{confirmation:"APAGAR TODOS"}});
   assert.equal(financeStaffImport.response.status,403,"finance role cannot import employee salary data");
+  assert.equal(financeStaffWrite.response.status,403,"finance role cannot create or modify employee salary records");
   assert.equal(financePayrollWrite.response.status,403,"finance role cannot write payroll records");
+  assert.equal(financeRegulatoryRefresh.response.status,403,"only an owner can start a regulatory scan");
   assert.equal(financeBulkDelete.response.status,403,"finance role cannot erase all company transactions");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transactions WHERE tenant_id=?").get(companyB.tenant_id).n),3,
     "a denied bulk erase must not change company transactions");
+  assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM company_staff WHERE tenant_id=?").get(companyB.tenant_id).n),0,
+    "denied staff operations must not create or alter employee records");
+  assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM staff_audit WHERE tenant_id=?").get(companyB.tenant_id).n),0,
+    "denied staff operations must not append audit records");
   const protectedCompanyRoutes=[
     ["/api/regulatory-updates","GET"],["/api/regulatory-updates/refresh","POST",{}],
     ["/api/staff/import","POST",{people:[{full_name:"Teste",monthly_salary:"0"}]}],
