@@ -61,21 +61,24 @@ async function main() {
     return { response, data };
   };
   const registerAndLogin = async (company, email) => {
-    const registration = await call("/api/auth/register", { method: "POST", body: {
-      name: `Responsável ${company}`, company, email, password: "Senha-Interna-2026!"
-    } });
-    assert.equal(registration.response.status, 202);
-    const user = sqlite.prepare("SELECT id,tenant_id FROM users WHERE email=?").get(email);
-    assert(user, "synthetic user should be persisted");
-    sqlite.prepare("UPDATE user_reviews SET status='approved' WHERE user_id=?").run(user.id);
-    const login = await call("/api/auth/login", { method: "POST", body: { email, password: "Senha-Interna-2026!" } });
+    const password = "Senha-Interna-2026!", now = new Date().toISOString();
+    const tenantId = "tenant-" + email.split("@")[0], userId = "user-" + email.split("@")[0];
+    const salt = "salt-" + email.split("@")[0];
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: new TextEncoder().encode(salt), iterations: 100000, hash: "SHA-256" }, key, 256);
+    const hash = [...new Uint8Array(bits)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+    sqlite.prepare("INSERT INTO tenants(id,name,plan,status,created_at) VALUES(?,?,?,'active',?)").run(tenantId, company, "Essencial — homologação", now);
+    sqlite.prepare("INSERT INTO users(id,tenant_id,name,email,password_hash,password_salt,role,status,created_at) VALUES(?,?,?,?,?,?,'owner','active',?)")
+      .run(userId, tenantId, "Responsável " + company, email, hash, salt, now);
+    sqlite.prepare("INSERT INTO user_reviews(user_id,status,reviewed_at,created_at) VALUES(?,'approved',?,?)").run(userId, now, now);
+    const user = { id: userId, tenant_id: tenantId };
+    const login = await call("/api/auth/login", { method: "POST", body: { email, password } });
     assert.equal(login.response.status, 200);
     assert.match(login.response.headers.get("set-cookie"), /HttpOnly; Secure; SameSite=Strict/,
       "company session cookies must be protected from script access and cross-site use");
     const cookie = login.response.headers.get("set-cookie").split(";")[0];
     return { ...user, cookie };
   };
-
   const companyA = await registerAndLogin("Empresa Sintética A", "a@example.test");
   const companyB = await registerAndLogin("Empresa Sintética B", "b@example.test");
   for(let attempt=1;attempt<=9;attempt++){
@@ -92,6 +95,52 @@ async function main() {
   assert.equal(foreignOriginRegistration.response.status,403,"mutation routes must reject cross-origin requests");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM users WHERE email LIKE '%@example.test'").get().n),2,
     "origin-rejected registrations must not create accounts");
+
+  const unavailable = await call("/api/trial/availability");
+  assert.equal(unavailable.data.email_ready, false, "trial email signup must stay closed until a verified sender is configured");
+  const leadInput = {
+    responsible_name: "Responsável Trial", company_name: "Empresa Trial Sintética", legal_name: "Empresa Trial Sintética Ltda",
+    cnpj: "12345678000199", email: "trial@example.test", phone: "65999990000",
+    segment: "Serviços", subsegment: "Tecnologia e software", employee_range: "1 a 5",
+    main_challenge: "Planejar o caixa", consent: true
+  };
+  const blockedTrial = await call("/api/trial/apply", { method: "POST", body: leadInput });
+  assert.equal(blockedTrial.response.status, 503);
+  assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM trial_applications").get().n), 0,
+    "a form must not claim to send verification when the sender is unavailable");
+
+  let verificationMessage = null;
+  env.EMAIL = { send: async message => { verificationMessage = message; } };
+  env.TRIAL_FROM_EMAIL = "noreply@example.test";
+  env.TRIAL_EMAIL_VERIFIED = "true";
+  assert.equal((await call("/api/trial/availability")).data.email_ready, true);
+  const requestTrial = await call("/api/trial/apply", { method: "POST", body: leadInput });
+  assert.equal(requestTrial.response.status, 202, JSON.stringify(requestTrial.data));
+  assert.equal(verificationMessage.to, leadInput.email);
+  const tokenMatch = verificationMessage.text.match(/https:\/\/futura\.test\/\?ativar=([a-f0-9]{64})/);
+  assert(tokenMatch, "the validation email must contain a one-time activation URL");
+  assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM users WHERE email=?").get(leadInput.email).n), 0,
+    "no credentials or company user should exist before email validation");
+  const activateTrial = await call("/api/trial/activate", {
+    method: "POST", body: { token: tokenMatch[1], password: "Senha-Trial-2026!" }
+  });
+  assert.equal(activateTrial.response.status, 200, JSON.stringify(activateTrial.data));
+  const trialUser = sqlite.prepare("SELECT u.id,u.tenant_id,t.trial_started_at,t.trial_ends_at FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.email=?").get(leadInput.email);
+  assert(trialUser, "email validation must create the business login");
+  assert.equal(sqlite.prepare("SELECT status FROM user_reviews WHERE user_id=?").get(trialUser.id).status, "approved");
+  const duration = Date.parse(trialUser.trial_ends_at) - Date.parse(trialUser.trial_started_at);
+  assert.equal(duration, 60 * 86400000, "the trial end date must be exactly 60 days after activation");
+  const trialProfile = sqlite.prepare("SELECT segment,subsegment,business_email FROM company_profiles WHERE tenant_id=?").get(trialUser.tenant_id);
+  assert.equal(trialProfile.segment, "Serviços");
+  assert.equal(trialProfile.subsegment, "Tecnologia e software");
+  assert.equal(trialProfile.business_email, leadInput.email);
+  const trialLogin = await call("/api/auth/login", { method: "POST", body: { email: leadInput.email, password: "Senha-Trial-2026!" } });
+  assert.equal(trialLogin.response.status, 200, "verified users must be able to use their trial immediately");
+  const reusedLink = await call("/api/trial/activate", {
+    method: "POST", body: { token: tokenMatch[1], password: "Senha-Trial-2026!" }
+  });
+  assert.equal(reusedLink.response.status, 410, "activation links must be single-use");
+
   const adminToken = "a".repeat(64);
   const adminDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(adminToken));
   const adminTokenHash = [...new Uint8Array(adminDigest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
