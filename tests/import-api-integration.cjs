@@ -295,6 +295,8 @@ async function main() {
   const dreA=await call("/api/dre?from=2026-10-01&to=2026-10-31",{cookie:companyA.cookie});
   const dreB=await call("/api/dre?from=2026-10-01&to=2026-10-31",{cookie:companyB.cookie});
   assert(dreA.data.details.some(row=>row.id===created.data.id),"company A DRE should include its own manual movement");
+  assert.equal(dreA.data.summary.net_income_partial,true,"unmapped movements must mark the DRE subtotal as partial");
+  assert.match(dreA.data.summary.net_income_label,/parcial/i,"DRE must label the result subtotal when classifications are pending");
   assert(!dreB.data.details.some(row=>row.id===created.data.id),"company B DRE must not expose company A movements");
   const ownUpdate=await call("/api/transactions/"+encodeURIComponent(created.data.id),{method:"PUT",cookie:companyA.cookie,body:{date:"2026-10-07",description:"Registro privado revisado",type:"expense",amount:40,category:"Operação",cost_center:"Privado"}});
   assert.equal(ownUpdate.response.status,200);
@@ -414,7 +416,7 @@ async function main() {
     const query=new URL(String(input)).searchParams.get("q")||"";
     const item=(title,url,date="Sat, 17 Oct 2026 09:00:00 GMT")=>`<item><title>${title}</title><link>${url}</link><pubDate>${date}</pubDate><source>Portal Sintético</source></item>`;
     const lower=query.toLocaleLowerCase("pt-BR");
-    const rss=lower.includes("software sob encomenda")?`<rss><channel>${item("Mercado de software sob encomenda cresce no Brasil","https://news.google.com/rss/articles/software-a")}${item("Mercado de software sob encomenda cresce no Brasil","https://news.google.com/rss/articles/software-a")}${item("Software sob encomenda em janeiro","https://news.google.com/rss/articles/software-old","Thu, 01 Jan 2026 09:00:00 GMT")}${item("Banco anuncia novas taxas de juros","https://news.google.com/rss/articles/bank-a")}</channel></rss>`:lower.includes("fintech de crédito")?`<rss><channel>${item("Fintech de crédito amplia serviços financeiros para empresas","https://news.google.com/rss/articles/finance-b")}</channel></rss>`:"<rss><channel></channel></rss>";
+    const rss=lower.includes("software sob encomenda")?`<rss><channel>${item("Mercado de software sob encomenda cresce no Brasil","https://news.google.com/rss/articles/software-a")}${item("Mercado de software sob encomenda cresce no Brasil","https://news.google.com/rss/articles/software-a")}${item("Software sob encomenda em janeiro","https://news.google.com/rss/articles/software-old","Thu, 01 Jan 2026 09:00:00 GMT")}${item("Dia dos Pais abre segundo semestre com vendas aquecidas","https://news.google.com/rss/articles/august-old","Sun, 09 Aug 2026 09:00:00 GMT")}${item("Banco anuncia novas taxas de juros","https://news.google.com/rss/articles/bank-a")}</channel></rss>`:lower.includes("fintech de crédito")?`<rss><channel>${item("Fintech de crédito amplia serviços financeiros para empresas","https://news.google.com/rss/articles/finance-b")}</channel></rss>`:"<rss><channel></channel></rss>";
     return new Response(rss,{status:200,headers:{"content-type":"application/rss+xml"}});
   };
   let newsA,newsB;
@@ -424,10 +426,17 @@ async function main() {
   }finally{global.fetch=originalFeedFetch;}
   assert.equal(newsA.data.status.level,"segment");
   assert.equal(newsB.data.status.level,"segment");
-  assert.equal(newsA.data.items.length,1,"duplicate, old and unrelated headlines must be removed");
+  assert.equal(newsA.data.items.length,1,"duplicate, old (including August) and unrelated headlines must be removed");
   assert.match(newsA.data.items[0].title,/software sob encomenda/i);
   assert.match(newsB.data.items[0].title,/fintech de crédito/i);
   assert.notEqual(newsA.data.items[0].title,newsB.data.items[0].title,"sector news must be independently selected per tenant");
+  assert.equal(newsA.data.status.provider_version,5,"news freshness policy version must invalidate old cached feeds");
+  global.fetch=async()=>new Response(`<rss><channel><item><title>Dia dos Pais abre segundo semestre com vendas aquecidas</title><link>https://news.google.com/rss/articles/august-only</link><pubDate>Sun, 09 Aug 2026 09:00:00 GMT</pubDate><source>Portal Sintético</source></item></channel></rss>`,{status:200,headers:{"content-type":"application/rss+xml"}});
+  let staleOnlyNews;
+  try{staleOnlyNews=await call("/api/sector-news",{cookie:companyA.cookie});}
+  finally{global.fetch=originalFeedFetch;}
+  assert.equal(staleOnlyNews.data.status.matched,0,"an August headline must not be treated as current in October");
+  assert.equal(staleOnlyNews.data.items.some(item=>item.url.includes("august-only")),false,"stale headlines must be removed rather than shown");
   global.fetch=async()=>{throw new Error("synthetic feed outage")};
   let unavailableNews;
   try{unavailableNews=await call("/api/sector-news",{cookie:companyA.cookie});}
