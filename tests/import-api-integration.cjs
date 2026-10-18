@@ -264,9 +264,10 @@ async function main() {
   assert.equal(dashboardA.data.net_cents,100085);
   assert.equal(dashboardA.data.count,3);
 
-  sqlite.exec("CREATE TRIGGER fail_transaction_audit BEFORE INSERT ON transaction_audit BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;");
+  sqlite.exec("CREATE TRIGGER fail_transaction_audit BEFORE INSERT ON transaction_audit BEGIN SELECT RAISE(ABORT, 'synthetic-private-marker-4812'); END;");
   const originalConsoleError=console.error;
-  console.error=()=>{};
+  const internalLogs=[];
+  console.error=(...args)=>internalLogs.push(args.map(String).join(" "));
   let failedBatch;
   try {
     failedBatch = await call("/api/transactions/import", { method: "POST", cookie: companyA.cookie,
@@ -275,6 +276,10 @@ async function main() {
   assert.equal(failedBatch.response.status, 500);
   assert.deepEqual(failedBatch.data, { error: "A importação não foi concluída. Nenhum dado do arquivo atual deve ser considerado confirmado." },
     "import failures must return a safe, actionable message without internal database details");
+  assert.deepEqual(internalLogs, ["FUTURA_INTERNAL_FAILURE Transaction import batch failed Error"],
+    "internal logs must retain the failure category without raw exception details");
+  assert.equal(internalLogs.join(" ").includes("synthetic-private-marker-4812"), false,
+    "database exception text must not leak into application logs");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transactions WHERE tenant_id=?").get(companyA.tenant_id).n), 3,
     "failed atomic import must leave no partial transactions");
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS n FROM transaction_audit WHERE tenant_id=? AND action='importado'").get(companyA.tenant_id).n), 2,
