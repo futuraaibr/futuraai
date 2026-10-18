@@ -141,6 +141,22 @@ async function main() {
   });
   assert.equal(reusedLink.response.status, 410, "activation links must be single-use");
 
+  const previousFetch=global.fetch;
+  let relayMessage=null;
+  global.fetch=async (target,options)=>{relayMessage={target,body:JSON.parse(options.body)};return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json"}})};
+  env.EMAIL=undefined;env.TRIAL_FROM_EMAIL=undefined;env.TRIAL_EMAIL_VERIFIED=undefined;
+  env.GMAIL_RELAY_URL="https://script.google.com/macros/s/test-deployment/exec";
+  env.GMAIL_RELAY_TOKEN="r".repeat(48);
+  assert.equal((await call("/api/trial/availability")).data.email_ready,true,"a configured Gmail relay should enable trial email");
+  const relayLead={...leadInput,responsible_name:"Responsável Relay",company_name:"Empresa Relay Sintética",legal_name:"Empresa Relay Sintética Ltda",cnpj:"98765432000199",email:"trial-relay@example.test"};
+  const relayApply=await call("/api/trial/apply",{method:"POST",body:relayLead});
+  assert.equal(relayApply.response.status,202,JSON.stringify(relayApply.data));
+  assert.equal(relayMessage.body.to,relayLead.email);
+  assert.equal(relayMessage.body.senderName,"FUTURA AI");
+  assert.match(relayMessage.body.text,/ativar=/);
+  assert.equal(relayMessage.body.token,"r".repeat(48));
+  global.fetch=previousFetch;
+  delete env.GMAIL_RELAY_URL;delete env.GMAIL_RELAY_TOKEN;
   const adminToken = "a".repeat(64);
   const adminDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(adminToken));
   const adminTokenHash = [...new Uint8Array(adminDigest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
