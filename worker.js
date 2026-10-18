@@ -422,7 +422,20 @@ function validIsoDate(value) {
 }
 
 function billingEmailReady(env){return Boolean(env.EMAIL&&env.BILLING_FROM_EMAIL&&env.BILLING_EMAIL_VERIFIED==="true")}
-function trialEmailReady(env){return Boolean(env.EMAIL&&env.TRIAL_FROM_EMAIL&&env.TRIAL_EMAIL_VERIFIED==="true")}
+function gmailRelayReady(env){
+  try{const u=new URL(String(env.GMAIL_RELAY_URL||""));return u.protocol==="https:"&&u.hostname==="script.google.com"&&u.pathname.startsWith("/macros/s/")&&u.pathname.endsWith("/exec")&&String(env.GMAIL_RELAY_TOKEN||"").length>=32}catch{return false}
+}
+function trialEmailReady(env){return gmailRelayReady(env)||Boolean(env.EMAIL&&env.TRIAL_FROM_EMAIL&&env.TRIAL_EMAIL_VERIFIED==="true")}
+async function sendTrialVerificationEmail(env,{to,subject,text}){
+  if(gmailRelayReady(env)){
+    const response=await fetch(env.GMAIL_RELAY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:env.GMAIL_RELAY_TOKEN,to,subject,text,senderName:"FUTURA AI"})});
+    let result;try{result=await response.json()}catch{}
+    if(!response.ok||result?.ok!==true)throw new Error("Gmail relay did not accept the message");
+    return result
+  }
+  if(!env.EMAIL||!env.TRIAL_FROM_EMAIL||env.TRIAL_EMAIL_VERIFIED!=="true")throw new Error("No verified trial email provider is configured");
+  return env.EMAIL.send({to,from:{email:env.TRIAL_FROM_EMAIL,name:"FUTURA AI"},subject,text})
+}
 
 function nextMonthDate(value){const [year,month,day]=value.split('-').map(Number);const first=new Date(Date.UTC(year,month,1));const lastDay=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0)).getUTCDate();return `${first.getUTCFullYear()}-${String(first.getUTCMonth()+1).padStart(2,'0')}-${String(Math.min(day,lastDay)).padStart(2,'0')}`}
 
@@ -1183,7 +1196,7 @@ async function handleApi(request, env, url) {
     const verifyUrl=new URL("/",url.origin);verifyUrl.searchParams.set("ativar",token);
     const subject="Confirme seu e-mail para testar a FUTURA AI";
     const textBody="Olá, "+name+".\n\nPara confirmar seu e-mail e criar sua senha de acesso à FUTURA AI, abra o link (válido por 24 horas):\n"+verifyUrl.toString()+"\n\nSe você não solicitou o teste, ignore esta mensagem.";
-    try{await env.EMAIL.send({to:email,from:{email:env.TRIAL_FROM_EMAIL,name:"FUTURA AI"},subject,text:textBody})}
+    try{await sendTrialVerificationEmail(env,{to:email,subject,text:textBody})}
     catch(error){logInternalFailure("Trial verification email failed",error);return fail("Não foi possível enviar o e-mail de validação. Tente novamente mais tarde.",503)}
     await db.prepare("UPDATE trial_applications SET verification_sent_at=?,updated_at=? WHERE id=?").bind(created,created,applicationId).run();
     return json({ok:true,message:"Enviamos uma mensagem de validação para o e-mail informado. O link expira em 24 horas."},202);
