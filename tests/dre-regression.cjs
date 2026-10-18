@@ -44,7 +44,28 @@ const duplicateSet=[row("dup1","income",100000,"Vendas","Venda repetida"),row("d
 const duplicateReport=calculateDre(duplicateSet,{"income\u0000Vendas":{dre_line:"revenue"}});
 assert.equal(duplicateReport.summary.duplicate_candidate_count,2);
 assert.equal(duplicateReport.details.filter(x=>x.duplicate_suspected).length,2);
+
 assert(duplicateReport.warnings.some(x=>x.includes("podem estar duplicados")));
+
+const fullyClassifiedDuplicateRows=[
+  row("rev1","income",1000000,"Receita principal","Venda recorrente"),
+  row("rev2","income",1000000,"Receita principal","Venda recorrente"),
+  row("deductions","expense",100000,"Tributos sobre vendas","Impostos sobre venda"),
+  row("direct-costs","expense",200000,"CMV","Custo de mercadoria"),
+  row("income-tax","expense",50000,"IRPJ e CSLL","Tributos sobre o lucro")
+];
+const fullyClassifiedDuplicateOverrides={
+  "income\u0000Receita principal":{dre_line:"revenue"},
+  "expense\u0000Tributos sobre vendas":{dre_line:"deductions"},
+  "expense\u0000CMV":{dre_line:"direct_costs"},
+  "expense\u0000IRPJ e CSLL":{dre_line:"income_taxes"}
+};
+const duplicateMustStayPreliminary=calculateDre(fullyClassifiedDuplicateRows,fullyClassifiedDuplicateOverrides);
+assert.equal(duplicateMustStayPreliminary.summary.validation_status,"preliminary","possible duplicate movements must prevent the DRE from being marked as managerially validated");
+assert.equal(duplicateMustStayPreliminary.summary.net_income_partial,true,"possible duplicates must keep the net result partial");
+assert.equal(duplicateMustStayPreliminary.summary.net_margin_pct,null,"possible duplicates must suppress the net margin");
+assert.match(duplicateMustStayPreliminary.summary.net_income_label,/parcial/i);
+
 
 const genericTax = row("tax2","expense",100000,"Impostos","Pagamento de impostos");
 assert.equal(suggestDreClassification(genericTax).line,"unclassified");
@@ -67,6 +88,7 @@ assert.match(source,/dre_category_overrides/);
 assert.match(source,/transactionAuditStatement\(db,user,"classificacao_dre"/);
 const appHtml = require("child_process").execFileSync("node", ["--input-type=module", "-e", "import worker from './worker.js'; const r=await worker.fetch(new Request('https://local.test/'),{}); process.stdout.write(await r.text())"], {encoding:"utf8"});
 const script = [...appHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(x=>x[1]).join("\n");
+new vm.Script(script,{filename:"company-dashboard.js"});
 const xmlStart = script.indexOf("function xmlCell(");
 const xmlEnd = script.indexOf("function renderDre(report)", xmlStart);
 assert(xmlStart>=0&&xmlEnd>xmlStart, "Excel exporter must exist");
@@ -80,4 +102,7 @@ assert.match(xls,/<Worksheet ss:Name="Notas">/);
 assert.match(xls,/>50575\.00</);
 assert.match(xls,/>5000\.00</);
 assert.match(xls,/>Venda de teste</);
+const adminHtml = require("child_process").execFileSync("node", ["--input-type=module", "-e", "import worker from './worker.js'; const r=await worker.fetch(new Request('https://local.test/admin'),{}); process.stdout.write(await r.text())"], {encoding:"utf8"});
+const adminScript=[...adminHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(x=>x[1]).join("\n");
+new vm.Script(adminScript,{filename:"admin-dashboard.js"});
 console.log("DRE regression checks passed: A reclassification, B opening balance, duplicate detection, generic taxes/costs pending, competence priority, tenant separation, audited override storage.");
