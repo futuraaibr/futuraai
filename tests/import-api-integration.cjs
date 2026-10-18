@@ -100,7 +100,7 @@ async function main() {
   assert.equal(unavailable.data.email_ready, false, "trial email signup must stay closed until a verified sender is configured");
   const leadInput = {
     responsible_name: "Responsável Trial", company_name: "Empresa Trial Sintética", legal_name: "Empresa Trial Sintética Ltda",
-    cnpj: "12345678000199", email: "trial@example.test", phone: "65999990000",
+    cnpj: "98765432000198", email: "trial@example.test", phone: "65999990000",
     segment: "Serviços", subsegment: "Tecnologia e software", employee_range: "1 a 5",
     main_challenge: "Planejar o caixa", consent: true
   };
