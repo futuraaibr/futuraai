@@ -718,9 +718,9 @@ const APP_HTML = `<!doctype html>
 #marketing.landing{background:#f3f6fa;color:#15253a;min-height:100vh;overflow:hidden}
 #marketing .landing-shell{max-width:1440px;margin:auto;background:#f3f6fa}
 #marketing .landing-header{height:86px;max-width:1240px;margin:auto;padding:0 30px;display:flex;align-items:center;justify-content:space-between;gap:24px}
-#marketing .landing-brand{display:flex;flex-direction:column;gap:4px;min-width:170px}
+#marketing .landing-brand{display:flex;flex-direction:column;gap:4px;min-width:170px;padding:6px 10px;border-radius:8px;background:#12253b}
 #marketing .landing-brand img{width:148px;height:34px;object-fit:contain;object-position:left center}
-#marketing .landing-brand span{font-size:8px;letter-spacing:.16em;color:#6d7e93;font-weight:800}
+#marketing .landing-brand span{font-size:8px;letter-spacing:.16em;color:#c3d3e2;font-weight:800}
 #marketing .landing-nav{display:flex;align-items:center;gap:34px;color:#516176;font-size:13px;font-weight:650}
 #marketing .landing-nav a:hover{color:#087c78}
 #marketing .land-btn{min-height:49px;padding:0 22px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;gap:14px;font-weight:750;font-size:13px;letter-spacing:.005em;transition:transform .2s,box-shadow .2s,background .2s}
